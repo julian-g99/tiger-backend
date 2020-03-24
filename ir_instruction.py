@@ -165,6 +165,9 @@ class IRInstruction:
         if self.is_label:
             return self.argument_list[0]
 
+    def is_arithmetic(self):
+        arithmetics = ['add', 'sub', 'mult', 'div', 'and', 'or']
+        return self.instruction_type in arithmetics
     
     def __str__(self):
         return "line number: {}, type: {}, argument_list: {}".format(self.line, self.instruction_type, self.argument_list)
