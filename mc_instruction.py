@@ -50,14 +50,14 @@ class MCInstruction:
         if self.op == 'noop':
             return self.op
         if self.op in RWMEM:
-            return '{} {} {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
+            return '{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
         outstr = self.op
         if self.regs != None:
             outstr += ' ' + ', '.join(self.regs)
         if self.imm != None:
-            outstr += ' ' + str(self.imm)
+            outstr += ', ' + str(self.imm)
         if self.target != None:
-            outstr += ' ' + self.target
+            outstr += ', ' + self.target
         return outstr
     
     def _formatOp(self, op):
@@ -85,12 +85,10 @@ class MIPSAllocator:
     def _canAlloc(self, target):
         return TARGETS[target] >= 3  # Further optimization could allow for this number to be 2
     
-    def _genStackAlloc(self, offset=0):
-        if type(offset) != int:
-            raise TypeError("offset must be of type int. Got {}".format(type(offset)))
+    def _genStackAlloc(self):
         return (
             MCInstruction('addi', regs=[SPREG, SPREG], imm=-4),
-            MCInstruction('sw', regs=[ZREG, SPREG], offset=offset)
+            MCInstruction('sw', regs=[ZREG, SPREG], offset=0)
         )
     
     def _genStackStore(self, preg, offset=0):
@@ -139,39 +137,40 @@ class NaiveMIPSAllocator(MIPSAllocator):
         vregs = self._getVirtualRegs(target)
         pregs = self._getPhysicalRegs(target)
         newProgram = []
-
+        newProgram.append(self.program[0]) # assume first instruction is main label
         # 1) insert stack allocs. This must be the first modification of the stack pointer
-        newProgram.append(MCInstruction('label', target='main')) # assume first instruction is always the main label
-        for i in range(1, len(vregs)):
+        for i in range(0, len(vregs)):
             vr = vregs[i]
-            offset = i*4
-            i1, i2 = self._genStackAlloc(offset=offset)
+            i1, i2 = self._genStackAlloc()
             newProgram.append(i1)
             newProgram.append(i2)
         regPointerOffset = 0
-
         # 2) insert load, original, and store instructions. We track the stack pointer offset since step 1.
-        for instruction in self.program:
-            regPointerOffset += self._getStackModifierImm(instruction) # calculate the new stack pointer offset since step 1
+        for i in range(1, len(self.program)):
+            instruction = self.program[i]
+            regPointerOffset -= self._getStackModifierImm(instruction) # calculate the new stack pointer offset since step 1
             # insert pre instruction loads
-            if instruction.op in WREG:
-                if len(instruction.regs) > 1:
-                    for j in range(1, len(instruction.regs)):
-                        vr = instruction.regs[j]
-                        if vr in vregs:
-                            pr = pregs[j]
-                            offset = self._getStackOffset(vr, vregs, regPointerOffset) * 4
-                            newProgram.append(self._genStackLoad(pr, offset=offset))
+            if instruction.regs != None:
+                for j in range(0, len(instruction.regs)):
+                    vr = instruction.regs[j]
+                    if vr in vregs:
+                        pr = pregs[j]
+                        offset = self._getStackOffset(vr, vregs, regPointerOffset)
+                        newProgram.append(self._genStackLoad(pr, offset=offset))
+                        # print(newProgram[-1])
             # insert original instruction with new registers mapped
             newInstruction = self._mapInstructionRegs(instruction, vregs, pregs)
             newProgram.append(newInstruction)
+            # print(newProgram[-1])
             # insert post instruction stores
-            if instruction.op in WREG: 
-                vr = instruction.regs[0] # assumes the only register ever updated in an instruction is the first one
-                if vr in vregs:
-                    pr = pregs[0]
-                    offset = self._getStackOffset(vr, vregs, regPointerOffset) * 4
-                    newProgram.append(self._genStackStore(pr, offset=offset))
+            if instruction.regs != None:
+                for j in range(0, len(instruction.regs)):
+                    vr = instruction.regs[j] # assumes the only register ever updated in an instruction is the first one
+                    if vr in vregs:
+                        pr = pregs[j]
+                        offset = self._getStackOffset(vr, vregs, regPointerOffset)
+                        newProgram.append(self._genStackStore(pr, offset=offset))
+                        # print(newProgram[-1])
         return newProgram
 
     def _mapInstructionRegs(self, instruction, vregs=[], pregs=[]):
@@ -185,15 +184,15 @@ class NaiveMIPSAllocator(MIPSAllocator):
             return instruction
         op = instruction.op
         imm = instruction.imm
+        offset = instruction.offset
         regs = []
-        pregIdx = 0
-        for r in instruction.regs:
+        for i in range(0, len(instruction.regs)):
+            r = instruction.regs[i]
             if r in vregs:
-                regs.append(pregs[pregIdx])
-                pregIdx += 1
+                regs.append(pregs[i])
             else:
                 regs.append(r)
-        return MCInstruction(op, regs=regs, imm=imm)
+        return MCInstruction(op, regs=regs, imm=imm, offset=offset)
     
     # Returns the immutable value of an instruction if it modifies the stack pointer. Else return 0.
     # This is used to help track the offset of the stack pointer to the area on the stack where space is cleared
@@ -211,18 +210,20 @@ class NaiveMIPSAllocator(MIPSAllocator):
     # This calculates the exact offset from the stack pointer to the area on the stack a given
     # virtual is saved to.
     def _getStackOffset(self, vr, vregs, regPointerOffset):
-        return vregs.index(vr) + regPointerOffset
+        return vregs.index(vr) * 4 + regPointerOffset
 
 
 def main():
     program = [
         MCInstruction("label", target="main"),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=5),
-        MCInstruction("addi", regs=["$t1", "$zero"], imm=10),
+        MCInstruction("addi", regs=["$t0", "$zero"], imm=1),
+        MCInstruction("addi", regs=["$t1", "$zero"], imm=2),
         MCInstruction("add", regs=["$t2", "$t0", "$t1"]),
         MCInstruction("add", regs=["$a0", "$t1", "$t2"]),
         MCInstruction("jal", target="func"),
 
+        MCInstruction("add", regs=["$s0", "$t2", "$t1"]),
+        MCInstruction("addi", regs=["$s0", "$s0"], imm=9),
         MCInstruction("label", target="end"),
         MCInstruction("j", target="end"),
 
@@ -231,11 +232,13 @@ def main():
         MCInstruction("sw", regs=["$t0", "$sp"], offset=0),
         MCInstruction("sw", regs=["$t1", "$sp"], offset=4),
         MCInstruction("sw", regs=["$t2", "$sp"], offset=8),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=10),
-        MCInstruction("addi", regs=["$v0", "$t0"], imm=11),
+        MCInstruction("addi", regs=["$t0", "$zero"], imm=5),
+        MCInstruction("addi", regs=["$t1", "$zero"], imm=7),
+        MCInstruction("add", regs=["$t2", "$t1", "$t0"]),
+        MCInstruction("addi", regs=["$v0", "$t2"], imm=3),
         MCInstruction("lw", regs=["$t0", "$sp"], offset=0),
         MCInstruction("lw", regs=["$t1", "$sp"], offset=4),
-        MCInstruction("sw", regs=["$t3", "$sp"], offset=8),
+        MCInstruction("lw", regs=["$t3", "$sp"], offset=8),
         MCInstruction("addi", regs=["$sp", "$sp"], imm=12),
         MCInstruction("jr", regs=["$ra"]),
     ]
