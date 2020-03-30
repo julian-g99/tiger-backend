@@ -4,6 +4,25 @@ TARGETS = {'$t':10}
 ZREG = '$zero'
 SPREG = '$sp'
 
+# For special case handling in calculating live ranges
+USEALLREGS = [
+    'beq',
+    'bgez',
+    'bgezal',
+    'bgtz',
+    'blez',
+    'bltz',
+    'bltzal',
+    'bne',
+    'div',
+    'divu',
+    'jr',
+    'mult',
+    'multu',
+    'sw',
+    'sb',
+    ]
+
 class MIPSAllocator:
     def __init__(self, program):
         if type(program) != list:
@@ -144,34 +163,105 @@ class NaiveMIPSAllocator(MIPSAllocator):
         return vregs.index(vr) * 4 + regPointerOffset
 
 
+class GreedyMIPSAllocator(MIPSAllocator):
+    def __init__(self, program):
+        super().__init__(program)
+    
+    def allocTarget(self, target='$t'):
+        if type(target) != str:
+            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
+        if not (target in TARGETS):
+            raise ValueError("target {} is invalid".format(target))
+        if not self._canAlloc(target):
+            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+        vregs = self._getVirtualRegs(target)
+        pregs = self._getPhysicalRegs(target)
+        return self._getLiveRanges(vregs, self.program)
+    
+    def _getLiveRanges(self, vregs, instructions):
+        lastUse = {}
+        ranges = {}
+        for vr in vregs:
+            lastUse[vr] = -1
+            ranges[vr] = []
+        for i in range(0, len(instructions)):
+            instruction = instructions[i]
+            _def = self._getDef(instruction)
+            if (_def != None):
+                self._deleteAfterLastUse(_def, lastUse[_def], ranges)
+                lastUse[_def] = i
+            uses = self._getUses(instruction)
+            for use in uses:
+                lastUse[use] = i
+            for vr in vregs:
+                ranges[vr].append(i)
+        for vr in vregs:
+            self._deleteAfterLastUse(vr, lastUse[vr], ranges)
+        return ranges
+
+    def _getUses(self, instruction):
+        if (instruction.regs == None) or (len(instruction.regs) == 0):
+            return []
+        if instruction.op in USEALLREGS:
+            return instruction.regs
+        else:
+            return instruction.regs[1:]
+
+    def _getDef(self, instruction):
+        if (instruction.regs == None) or (len(instruction.regs) == 0):
+            return None
+        if instruction.op in USEALLREGS:
+            return None
+        else:
+            return instruction.regs[0]
+    
+    def _deleteAfterLastUse(self, _def, lastUse, ranges):
+        if lastUse < 0:
+            ranges[_def] = []
+            return
+        if lastUse-1 < 0:
+            raise ValueError("def {} cannot be alive before program start".format(_def))
+        delIdx = ranges[_def].index(lastUse)
+        ranges[_def] = ranges[_def][:delIdx]
+
 def main():
+    # program = [
+    #     MCInstruction("label", target="main"),
+    #     MCInstruction("addi", regs=["$t0", "$zero"], imm=1),
+    #     MCInstruction("addi", regs=["$t1", "$zero"], imm=2),
+    #     MCInstruction("add", regs=["$t2", "$t0", "$t1"]),
+    #     MCInstruction("add", regs=["$a0", "$t1", "$t2"]),
+    #     MCInstruction("jal", target="func"),
+
+    #     MCInstruction("add", regs=["$s0", "$t2", "$t1"]),
+    #     MCInstruction("addi", regs=["$s0", "$s0"], imm=9),
+    #     MCInstruction("label", target="end"),
+    #     MCInstruction("j", target="end"),
+
+    #     MCInstruction("label", target="func"),
+    #     MCInstruction("addi", regs=["$sp", "$sp"], imm=-12),
+    #     MCInstruction("sw", regs=["$t0", "$sp"], offset=0),
+    #     MCInstruction("sw", regs=["$t1", "$sp"], offset=4),
+    #     MCInstruction("sw", regs=["$t2", "$sp"], offset=8),
+    #     MCInstruction("addi", regs=["$t0", "$zero"], imm=5),
+    #     MCInstruction("addi", regs=["$t1", "$zero"], imm=7),
+    #     MCInstruction("add", regs=["$t2", "$t1", "$t0"]),
+    #     MCInstruction("addi", regs=["$v0", "$t2"], imm=3),
+    #     MCInstruction("lw", regs=["$t0", "$sp"], offset=0),
+    #     MCInstruction("lw", regs=["$t1", "$sp"], offset=4),
+    #     MCInstruction("lw", regs=["$t3", "$sp"], offset=8),
+    #     MCInstruction("addi", regs=["$sp", "$sp"], imm=12),
+    #     MCInstruction("jr", regs=["$ra"]),
+    # ]
     program = [
-        MCInstruction("label", target="main"),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=1),
-        MCInstruction("addi", regs=["$t1", "$zero"], imm=2),
-        MCInstruction("add", regs=["$t2", "$t0", "$t1"]),
-        MCInstruction("add", regs=["$a0", "$t1", "$t2"]),
-        MCInstruction("jal", target="func"),
-
-        MCInstruction("add", regs=["$s0", "$t2", "$t1"]),
-        MCInstruction("addi", regs=["$s0", "$s0"], imm=9),
-        MCInstruction("label", target="end"),
-        MCInstruction("j", target="end"),
-
-        MCInstruction("label", target="func"),
-        MCInstruction("addi", regs=["$sp", "$sp"], imm=-12),
-        MCInstruction("sw", regs=["$t0", "$sp"], offset=0),
-        MCInstruction("sw", regs=["$t1", "$sp"], offset=4),
-        MCInstruction("sw", regs=["$t2", "$sp"], offset=8),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=5),
-        MCInstruction("addi", regs=["$t1", "$zero"], imm=7),
-        MCInstruction("add", regs=["$t2", "$t1", "$t0"]),
-        MCInstruction("addi", regs=["$v0", "$t2"], imm=3),
-        MCInstruction("lw", regs=["$t0", "$sp"], offset=0),
-        MCInstruction("lw", regs=["$t1", "$sp"], offset=4),
-        MCInstruction("lw", regs=["$t3", "$sp"], offset=8),
-        MCInstruction("addi", regs=["$sp", "$sp"], imm=12),
-        MCInstruction("jr", regs=["$ra"]),
+        MCInstruction('addi', regs=['$t0', '$zero'], imm=1),
+        MCInstruction('addi', regs=['$t1', '$zero'], imm=2),
+        MCInstruction('add', regs=['$t2', '$t0', '$t1']),
+        MCInstruction('sub', regs=['$t1', '$t2', '$t0']),
+        MCInstruction('addi', regs=['$t2', '$t0'], imm=3),
+        MCInstruction('add', regs=['$t0', '$t0', '$t0']),
+        MCInstruction('add', regs=['$t2', '$t1', '$t0']),
+        MCInstruction('add', regs=['$t3', '$t1', '$t2']),
     ]
 
     print("original code:\n")
@@ -180,10 +270,14 @@ def main():
     
     print("\n\nallocated code:\n")
 
-    nalloc = NaiveMIPSAllocator(program)
-    newProgram = nalloc.allocTarget('$t')
-    for instruction in newProgram:
-        print(instruction)
+    # nalloc = NaiveMIPSAllocator(program)
+    # newProgram = nalloc.allocTarget('$t')
+    # for instruction in newProgram:
+    #     print(instruction)
+    galloc = GreedyMIPSAllocator(program)
+    ranges = galloc.allocTarget('$t')
+    for vr in ranges.keys():
+        print('{} : {}'.format(vr, ranges[vr]))
 
 
 if __name__ == "__main__":

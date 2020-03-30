@@ -43,6 +43,7 @@ class CFG:
     def __init__(self, program):
         self.program = program
         self.adjList = {}
+        self.bbs = []
         self._build()
     
     def _build(self):
@@ -53,7 +54,6 @@ class CFG:
         self._buildR(1, bb)
     
     def _buildR(self, pp, bb):
-        print(pp)
         if pp < len(self.program):
             instruction = self.program[pp]
             if type(instruction) != MCInstruction:
@@ -61,6 +61,8 @@ class CFG:
             if instruction.op == 'jr':
                 # terminate at jr instruction. There is no way to find the target of a jr instruction without simulating a MIPS cpu
                 bb.addInstruction(instruction)
+                self.bbs.append(bb)
+                return
             if instruction.op in LINKERS:
                 # linking instructions exit the scope of the CFG
                 return
@@ -76,20 +78,27 @@ class CFG:
                         self.adjList[labelBB.pp] = []
                         self._buildR(labelPP+1, labelBB)
                 else:
+                    bb.addInstruction(instruction)
                     targetPP = self._getJumpTargetPP(instruction)
                     self.adjList[bb.pp].append(targetPP)
                     if targetPP not in self.adjList.keys():
-                        targetBB = BB(targetPP, instructions=[instruction])
+                        labelInstruction = self.program[targetPP]
+                        targetBB = BB(targetPP, instructions=[labelInstruction])
                         self.adjList[targetBB.pp] = []
                         self._buildR(targetPP+1, targetBB)
                     if instruction.op != 'j':
                         # only needed if jump is not unconditional
                         nextPP = pp + 1
-                        self.adjList[bb.pp].append(nextPP)
-                        if nextPP not in self.adjList.keys():
-                            nextBB = BB(nextPP, instructions=[instruction])
-                            self.adjList[nextBB.pp] = []
-                            self._buildR(nextPP+1, nextBB)
+                        if nextPP <= len(self.program):
+                            self.adjList[bb.pp].append(nextPP)
+                            if nextPP not in self.adjList.keys():
+                                nextBB = BB(nextPP, instructions=[])
+                                self.adjList[nextBB.pp] = []
+                                if self.program[nextPP].op == 'label':
+                                    nextBB.addInstruction(self.program[nextPP])
+                                    nextPP += 1
+                                self._buildR(nextPP, nextBB)
+                self.bbs.append(bb)
     
     def _getJumpTargetPP(self, jInstruction):
         if jInstruction.op == 'jr': # TODO: continue to think about this
@@ -123,6 +132,11 @@ def main():
 
     cfg = CFG(program)
     print(cfg.adjList)
+    print()
+    for bb in cfg.bbs:
+        print('{}: {}'.format(bb.pp, bb) + ":")
+        for intr in bb.instructions:
+            print("\t" + str(intr))
 
 
 if __name__ == "__main__":
