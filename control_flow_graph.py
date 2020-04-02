@@ -4,8 +4,11 @@ TERMINATORS = ['label', 'beq', 'bgez', 'bgtz', 'blez', 'bltz', 'bne', 'j']
 LINKERS = ['bgezal', 'bltzal', 'jal']
 
 class BB:
-    def __init__(self, pp, instructions=[]):
-        self.instructions = instructions
+    def __init__(self, pp, instructions=None):
+        if instructions == None:
+            self.instructions = []
+        else:
+            self.instructions = instructions
         self.pp = pp
     
     def __iter__(self):

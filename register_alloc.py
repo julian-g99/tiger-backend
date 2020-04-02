@@ -1,6 +1,7 @@
 from mc_instruction import MCInstruction
+import heapq
 
-TARGETS = {'$t':10}
+TARGETS = {'$t':3}
 ZREG = '$zero'
 SPREG = '$sp'
 
@@ -70,6 +71,19 @@ class MIPSAllocator:
         for i in range(0, pregCount):
             pregs.append(target + str(i))
         return pregs
+    
+    # Returns the immutable value of an instruction if it modifies the stack pointer. Else return 0.
+    # This is used to help track the offset of the stack pointer to the area on the stack where space is cleared
+    # for all virtual registers
+    def _getStackModifierImm(self, instruction):
+        if type(instruction) != MCInstruction:
+            raise Exception("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
+        if instruction.op == 'addi':
+            if (instruction.regs is None) | (len(instruction.regs) == 0) | (instruction.imm is None):
+                raise ValueError("Instruction is improperly formatted: {}".format(str(instruction)))
+            if instruction.regs[0] == SPREG:
+                return instruction.imm
+        return 0
     
 
 
@@ -144,19 +158,6 @@ class NaiveMIPSAllocator(MIPSAllocator):
                 regs.append(r)
         return MCInstruction(op, regs=regs, imm=imm, offset=offset)
     
-    # Returns the immutable value of an instruction if it modifies the stack pointer. Else return 0.
-    # This is used to help track the offset of the stack pointer to the area on the stack where space is cleared
-    # for all virtual registers
-    def _getStackModifierImm(self, instruction):
-        if type(instruction) != MCInstruction:
-            raise Exception("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
-        if instruction.op == 'addi':
-            if (instruction.regs is None) | (len(instruction.regs) == 0) | (instruction.imm is None):
-                raise ValueError("Instruction is improperly formatted: {}".format(str(instruction)))
-            if instruction.regs[0] == SPREG:
-                return instruction.imm
-        return 0
-    
     # This calculates the exact offset from the stack pointer to the area on the stack a given
     # virtual is saved to.
     def _getStackOffset(self, vr, vregs, regPointerOffset):
@@ -166,7 +167,16 @@ class NaiveMIPSAllocator(MIPSAllocator):
 class GreedyMIPSAllocator(MIPSAllocator):
     def __init__(self, program):
         super().__init__(program)
+        self._resetAllocParams()
     
+    def _resetAllocParams(self):
+        self.sregPointerOffset = 0
+        self.regMap = {}
+        self.vregs = []
+        self.pregs = []
+        self.sregs = []
+        self.newProgram = []
+
     def allocTarget(self, target='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
@@ -174,31 +184,166 @@ class GreedyMIPSAllocator(MIPSAllocator):
             raise ValueError("target {} is invalid".format(target))
         if not self._canAlloc(target):
             raise ValueError("There are not enough target registers to allocate target {}".format(target))
-        vregs = self._getVirtualRegs(target)
-        pregs = self._getPhysicalRegs(target)
-        return self._getLiveRanges(vregs, self.program)
+        self._resetAllocParams()
+        self.vregs = self._getVirtualRegs(target)
+        self.pregs = self._getPhysicalRegs(target)
+        liveranges = self._getLiveRanges()
+        self.regMap = self._getRegMap(liveranges)
+        print(liveranges)
+        print(self.regMap)
+        self.sregs = self.regMap['spill']
+        for sr in self.sregs:
+            self._insertStackAlloc()
+        self.sregPointerOffset = 0
+        for instruction in self.program:
+            self._checkForModifiedSP(instruction)
+            sregMap = self._getSregMap(instruction)
+            for sr in sregMap.keys():
+                self._insertPregStore(sregMap[sr])
+                self._insertSregLoad(sr, sregMap[sr])
+            self._insertMappedInstruction(instruction, sregMap)
+            for sr in sregMap.keys():
+                self._insertSregStore(sr, sregMap[sr])
+                self._insertPregLoad(sregMap[sr])
+        return self.newProgram
+
+    # inserts 2 instructions to allocate empty space on the stack for spilled registers
+    def _insertStackAlloc(self):
+        self.newProgram.append(MCInstruction('addi', regs=[SPREG, SPREG], imm=-4))
+        self.newProgram.append(MCInstruction('sw', regs=[ZREG, SPREG], offset=0))
     
-    def _getLiveRanges(self, vregs, instructions):
+    # inserts instruction for loading the value of a spilled reg into a given phyiscal reg
+    def _insertSregLoad(self, sr, preg):
+        offset = self._getStackOffset(sr)
+        self.newProgram.append(MCInstruction('lw', regs=[preg, SPREG], offset=offset))
+    
+    # inserts instruction for storing the value of a physical reg onto the area of the stack for a given spilled reg
+    def _insertSregStore(self, sr, preg):
+        if type(preg) != str:
+            raise TypeError("preg must be of type str. Got {}".format(type(preg)))
+        offset = self._getStackOffset(sr)
+        self.newProgram.append(MCInstruction('sw', regs=[preg, SPREG], offset=offset))
+    
+    # pops a value off the stack and loads it into the given physical reg
+    def _insertPregLoad(self, preg):
+        self.newProgram.append(MCInstruction('lw', regs=[preg, SPREG], offset=0))
+        self.newProgram.append(MCInstruction('addi', regs=[SPREG, SPREG], imm=4))
+        self.sregPointerOffset -= 4
+
+    # pushes the value of a given physical reg onto the stack
+    def _insertPregStore(self, preg):
+        self.newProgram.append(MCInstruction('addi', regs=[SPREG, SPREG], imm=-4))
+        self.newProgram.append(MCInstruction('sw', regs=[preg, SPREG], offset=0))
+        self.sregPointerOffset += 4
+
+    # checks if an instruction (addi only) modifies the value of the stack pointer and tracks it accordingly
+    def _checkForModifiedSP(self, instruction):
+        if type(instruction) != MCInstruction:
+            raise Exception("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
+        if (instruction.regs != None) and (instruction.regs[0] == SPREG):
+            if instruction.op == 'addi':
+                if (len(instruction.regs) == 0) | (instruction.imm is None):
+                    raise ValueError("Instruction is improperly formatted: {}".format(str(instruction)))
+                self.regStackOffset += instruction.imm
+            else:
+                raise ValueError('Instruction {} modifies stack pointer incorrectly'.format(instruction))
+    
+    # computes the offset of the stack location containing the value of a given spilled reg for load and store instructions
+    def _getStackOffset(self, sr):
+        return self.sregs.index(sr) * 4 + self.sregPointerOffset
+
+    # inserts an instruction with its virtual registers replaced with phyical ones
+    def _insertMappedInstruction(self, instruction, sregMap):
+        if instruction.regs == None:
+            self.newProgram.append(instruction)
+            return
+        op = instruction.op
+        imm = instruction.imm
+        offset = instruction.offset
+        regs = []
+        for r in instruction.regs:
+            if r in self.regMap.keys():
+                regs.append(self.regMap[r])
+            elif r in sregMap.keys():
+                regs.append(sregMap[r])
+            else:
+                regs.append(r)
+        self.newProgram.append(MCInstruction(op, regs=regs, imm=imm, offset=offset))
+    
+    # computes a legal mapping of spilled virtual registers to physical ones for a given instruction
+    def _getSregMap(self, instruction):
+        sregMap = {}
+        if instruction.regs == None:
+            return sregMap
+        mapped = self._getInstructionMappedPregs(instruction)
+        for reg in instruction.regs:
+            if reg in self.sregs:
+                if len(mapped) == len(self.pregs):
+                    raise ValueError('Register {} from instruction {} cannot be mapped. Ran out of available physical registers'.format(reg, instruction))
+                for pr in self.pregs:
+                    if pr not in mapped:
+                        sregMap[reg] = pr
+                        mapped.append(pr)
+        return sregMap
+    
+    # computes a legal mapping of virtual regs to physical ones for the entire program, spilling some regs if necessary
+    def _getRegMap(self, liveranges):
+        regMap = {}
+        regMap['spill'] = []
+        mapped = []
+        i = 0
+        while i < len(self.pregs):
+            maxVreg = None
+            for vr in liveranges.keys():
+                if (maxVreg == None) or (len(liveranges[vr]) > len(liveranges[maxVreg])):
+                    if vr not in mapped:
+                        maxVreg = vr
+            if maxVreg == None:
+                return regMap
+            regMap[maxVreg] = self.pregs[i]
+            i += 1
+            mapped.append(maxVreg)
+        if len(mapped) < len(liveranges.keys()):
+            for vr in liveranges.keys():
+                if vr not in mapped:
+                    regMap['spill'].append(vr)
+        return regMap
+    
+    # returns the to be mapped physical regs of an instruction
+    def _getInstructionMappedPregs(self, instruction):
+        pregs = []
+        if instruction.regs == None:
+            return pregs
+        for reg in instruction.regs:
+            if reg in self.regMap.keys():
+                pregs.append(self.regMap[reg])
+        return pregs
+
+    # computes the live ranges of all virtual regs
+    def _getLiveRanges(self):
         lastUse = {}
         ranges = {}
-        for vr in vregs:
+        for vr in self.vregs:
             lastUse[vr] = -1
             ranges[vr] = []
-        for i in range(0, len(instructions)):
-            instruction = instructions[i]
+        for i in range(0, len(self.program)):
+            instruction = self.program[i]
             _def = self._getDef(instruction)
-            if (_def != None):
-                self._deleteAfterLastUse(_def, lastUse[_def], ranges)
-                lastUse[_def] = i
-            uses = self._getUses(instruction)
+            if _def in self.vregs:
+                if (_def != None):
+                    self._deleteAfterLastUse(_def, lastUse[_def], ranges)
+                    lastUse[_def] = i
+                uses = self._getUses(instruction)
             for use in uses:
-                lastUse[use] = i
-            for vr in vregs:
+                if use in self.vregs:
+                    lastUse[use] = i
+            for vr in self.vregs:
                 ranges[vr].append(i)
-        for vr in vregs:
+        for vr in self.vregs:
             self._deleteAfterLastUse(vr, lastUse[vr], ranges)
         return ranges
 
+    # returns the virtual regs used in this instruction (according to definition of a use)
     def _getUses(self, instruction):
         if (instruction.regs == None) or (len(instruction.regs) == 0):
             return []
@@ -206,7 +351,8 @@ class GreedyMIPSAllocator(MIPSAllocator):
             return instruction.regs
         else:
             return instruction.regs[1:]
-
+    
+    # returns the virtual regs defined in this instruction
     def _getDef(self, instruction):
         if (instruction.regs == None) or (len(instruction.regs) == 0):
             return None
@@ -215,6 +361,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
         else:
             return instruction.regs[0]
     
+    # helper method used in self._getLiveRanges()
     def _deleteAfterLastUse(self, _def, lastUse, ranges):
         if lastUse < 0:
             ranges[_def] = []
@@ -254,14 +401,18 @@ def main():
     #     MCInstruction("jr", regs=["$ra"]),
     # ]
     program = [
-        MCInstruction('addi', regs=['$t0', '$zero'], imm=1),
+        MCInstruction('addi', regs=['$t3', '$zero'], imm=1),
         MCInstruction('addi', regs=['$t1', '$zero'], imm=2),
-        MCInstruction('add', regs=['$t2', '$t0', '$t1']),
-        MCInstruction('sub', regs=['$t1', '$t2', '$t0']),
+        MCInstruction('addi', regs=['$t0', '$zero'], imm=4),
+        MCInstruction('add', regs=['$t2', '$t3', '$t1']),
+        MCInstruction('sub', regs=['$t1', '$t2', '$t3']),
         MCInstruction('addi', regs=['$t2', '$t0'], imm=3),
-        MCInstruction('add', regs=['$t0', '$t0', '$t0']),
-        MCInstruction('add', regs=['$t2', '$t1', '$t0']),
-        MCInstruction('add', regs=['$t3', '$t1', '$t2']),
+        MCInstruction('add', regs=['$t3', '$t3', '$t3']),
+        MCInstruction('add', regs=['$t2', '$t1', '$t3']),
+        MCInstruction('add', regs=['$t0', '$t1', '$t2']),
+        MCInstruction('add', regs=['$a0', '$zero', '$t0']),
+        MCInstruction('label', target='end'),
+        MCInstruction('j', target='end'),
     ]
 
     print("original code:\n")
@@ -275,9 +426,9 @@ def main():
     # for instruction in newProgram:
     #     print(instruction)
     galloc = GreedyMIPSAllocator(program)
-    ranges = galloc.allocTarget('$t')
-    for vr in ranges.keys():
-        print('{} : {}'.format(vr, ranges[vr]))
+    newProgram = galloc.allocTarget('$t')
+    for i in newProgram:
+        print(i)
 
 
 if __name__ == "__main__":
