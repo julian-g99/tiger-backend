@@ -15,6 +15,10 @@ class SymbolicMap:
             self.curr += 1
         self.dict[key] = value
 
+    def __delitem__(self, key):
+        if key in self.dict.keys():
+            del self.dict[key]
+
 def test():
     u_map = SymbolicMap()
     print(u_map['xddd'])

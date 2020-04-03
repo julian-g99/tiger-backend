@@ -70,6 +70,11 @@ class IRInstruction:
         # self.succs = []
         # self.preds = []
 
+    def is_metadata(self):
+        metadata = ["function_start", "function_def", "function_end",
+                    "function_int_decl", "function_float_decl"]
+        return self.instruction_type in metadata
+
     def does_kill(self, other_def):
         return self.argument_list[0] == other_def.argument_list[0]
 
@@ -168,6 +173,9 @@ class IRInstruction:
     def is_arithmetic(self):
         arithmetics = ['add', 'sub', 'mult', 'div', 'and', 'or']
         return self.instruction_type in arithmetics
+
+    def is_function_call(self):
+        return self.instruction_type == "call" or self.instruction_type == "callr"
     
     def __str__(self):
         return "line number: {}, type: {}, argument_list: {}".format(self.line, self.instruction_type, self.argument_list)
