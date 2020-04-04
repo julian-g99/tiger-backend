@@ -1,4 +1,5 @@
 from ir_instruction import IRInstruction
+from function import Function
 from mc_instruction import MCInstruction
 from parser import parse_instructions
 from symbolic_map import SymbolicMap
@@ -120,10 +121,6 @@ def convert_branch(instr: IRInstruction) -> str:
 
         return [MCInstruction(op, regs=[s_map[src0], s_map[src1]], target=label)]
 
-def convert_function_call(instr):
-    # TODO: implement
-    return ""
-
 def convert_array_load_store(instr):
     # TODO: implement
     assert(instr.instruction_type in ["array_store", "array_load"])
@@ -217,19 +214,50 @@ def convert_array_assign(instr):
 
     return output
 
-def function_to_asm(function: List[IRInstruction]) -> List[MCInstruction]:
-    output = []
+def function_to_asm(function: Function) -> List[MCInstruction]:
+
+    # prologue
+    prologue = []
+    sp = "$sp"
+    if function.stack_type == "simple_leaf":
+        prologue += function.body
+    elif function.stack_type == "data_leaf":
+        # make space for array
+        curr_offset = 0
+        if function.has_array:
+            for arr in function.int_arrs:
+                prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=arr[1]*4)) #arr[1] should be the size of the array
+                curr_offset += arr[1]
+                # FIXME: give the array address to something (probably a map?)
+
+        # add padding if needed
+        if curr_offset + function.saved_regs_count % 2 == 1:
+            prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=4))
+
+        # store any saved registers that we will change
+        prologue.append(MCInstruction("addiu", regs=["$sp", "$sp"], offset=function.saved_regs_count * 4))
+        curr_offset += function.saved_regs_count # NOTE: this is only for keep track of double-words
+        for i in range(function.saved_regs_count):
+            prologue.append(MCInstruction("sw", regs=["$sp", "$sp"], offset=i*4))
+    elif function.stack_type == "nonleaf":
+        # TODO: implement
+        a = 0
 
 
-    # handling callee stuff
 
-    for i in function:
-        if not i.is_metadata():
-            output.append(instr_to_asm(i))
+    # body
+    body = []
+    for i in function.body:
+        body += instr_to_asm(body)
 
-    return output
+    #epilogue
+    epilogue = []
+    sp = "$sp"
+    if function.stack_type == "simple_leaf":
+        epilogue.append(MCInstruction("jr", regs="$ra"))
 
-def instr_to_asm(instr: IRInstruction) -> str:
+
+def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     """
     Converts an IRInstruction object into assembly code string
     Curretnly uses only symbolic registers
@@ -242,8 +270,6 @@ def instr_to_asm(instr: IRInstruction) -> str:
         return convert_assignment(instr)
     if instr.is_branch:
         return convert_branch(instr)
-    if instr.is_function_call():
-        return convert_function_call(instr)
     if instr.instruction_type == "array_store" or instr.instruction_type == "array_load":
         return convert_array_load_store(instr)
     if instr.instruction_type == "array_assign":
@@ -262,10 +288,4 @@ def main():
     return output
 
 if __name__ == "__main__":
-    instructions = parse_instructions("./test_cases/bfs/bfs.ir")
-    functions = find_functions(instructions)
-
-    for f in functions:
-        for i in f:
-            print(i)
-        print()
+    main()
