@@ -16,10 +16,19 @@ def is_constant(arg: str) -> bool:
 def find_functions(instructions: List[IRInstruction]) -> List[List[IRInstruction]]:
     output = []
 
+    inside_function = False
+    curr_function = []
     for instr in instructions:
         if instr.instruction_type == "function_start":
-            output.append([])
-        output[-1].append(instr)
+            inside_function = True
+            curr_function = []
+            curr_function.append(instr)
+        elif instr.instruction_type == "function_end":
+            curr_function.append(instr)
+            inside_function = False
+            output.append(Function(curr_function))
+        else:
+            curr_function.append(instr)
 
     return output
 
@@ -256,6 +265,13 @@ def function_to_asm(function: Function) -> List[MCInstruction]:
     if function.stack_type == "simple_leaf":
         epilogue.append(MCInstruction("jr", regs="$ra"))
 
+def convert_label(instr: IRInstruction):
+    assert(instr.instruction_type == "label")
+    return [MCInstruction("label", target=instr.argument_list[0])]
+
+def convert_calls(instr: IRInstruction):
+    assert(instr.instruction_type == "call" or instr.instruction_type == "callr")
+    return [MCInstruction("nop")]
 
 def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     """
@@ -266,16 +282,18 @@ def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     if instr.is_arithmetic():
         assert(not is_constant(instr.argument_list[0])) # dest can't be constant
         return convert_arithmetic(instr)
-    if instr.instruction_type == "val_assign":
+    elif instr.instruction_type == "val_assign":
         return convert_assignment(instr)
-    if instr.is_branch:
+    elif instr.is_branch:
         return convert_branch(instr)
-    if instr.instruction_type == "array_store" or instr.instruction_type == "array_load":
+    elif instr.instruction_type == "array_store" or instr.instruction_type == "array_load":
         return convert_array_load_store(instr)
-    if instr.instruction_type == "array_assign":
+    elif instr.instruction_type == "array_assign":
         return convert_array_assign(instr)
-    else:
-        return ["not implemented"]
+    elif instr.instruction_type == "label":
+        return convert_label(instr)
+    elif instr.instruction_type in ["call", "callr"]:
+        return convert_calls(instr)
 
 def main():
     instructions = parse_instructions("./test_cases/bfs/bfs/ir")

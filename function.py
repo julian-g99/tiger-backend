@@ -13,7 +13,7 @@ class Function:
         num_temps = 10
         self.saved_regs_count = len(self.int_vals) + len(self.int_arrs) - num_temps
         self.has_array = len(self.int_arrs) == 0
-        self.has_data = saved_regs_count != 0 or self.has_array
+        self.has_data = self.saved_regs_count != 0 or self.has_array
 
         if self.__is_leaf() and not self.has_data:
             self.stack_type = "simple_leaf"
