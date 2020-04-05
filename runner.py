@@ -10,8 +10,6 @@ def main():
         translated = []
         for i in f.body():
             translated += instr_to_asm(i)
-            if instr_to_asm(i) == ['not implemented']:
-                print(i)
         output.append(translated)
 
 
