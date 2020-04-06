@@ -37,8 +37,9 @@ class MIPSAllocator:
         self.pregs = []
     
     def _canAlloc(self, target):
-        return TARGETS[target] >= 3  # Further optimization could allow for this number to be 2
-    
+        # return TARGETS[target] >= 3  # Further optimization could allow for this number to be 2
+        return True
+
     def _genStackAlloc(self):
         return (
             MCInstruction('addi', regs=[SPREG, SPREG], imm=-4),
@@ -50,7 +51,7 @@ class MIPSAllocator:
         for instruction in self.program:
             if instruction.regs != None:
                 for r in instruction.regs:
-                    if (r[:2] == target) & (r not in regs):
+                    if (r[:len(target)] == target) & (r not in regs):
                         regs.append(r)
         return regs
 
@@ -100,19 +101,17 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
-    def allocProgram(self):
+    def allocProgram(self, target='$t'):
         cfg = CFG(self.program)
         newBBs = []
         for bb in cfg.bbs:
-            newBB = self._allocBlock(bb)
+            newBB = self._allocBlock(bb, target=target)
             newBBs.append(newBB)
         return newBBs
 
     def _allocBlock(self, block, target='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not (target in TARGETS):
-            raise ValueError("target {} is invalid".format(target))
         if not self._canAlloc(target):
             raise ValueError("There are not enough target registers to allocate target {}".format(target))
         self._resetAllocParams()
@@ -302,8 +301,6 @@ class NaiveMIPSAllocator(MIPSAllocator):
     def allocProgram(self, target='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not (target in TARGETS):
-            raise ValueError("target {} is invalid".format(target))
         if not self._canAlloc(target):
             raise ValueError("There are not enough target registers to allocate target {}".format(target))
         self._resetAllocParams()
@@ -320,7 +317,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
             self._insertMappedInstruction(instruction, regMap)
             for vr in regMap.keys():
                 self._insertVregStore(vr, regMap[vr])
-        return self.newProgram
+        return [BB(0, instructions=self.newProgram)]
 
     # inserts 2 instructions to allocate empty space on the stack for virtual registers
     def _insertStackAlloc(self):
