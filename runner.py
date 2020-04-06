@@ -15,6 +15,8 @@ def main():
     allocator = None
     instructions = parse_instructions(fname)
     functions = find_functions(instructions)
+    for i in functions[0].body():
+        print(i)
     translated_functions = []
     for func in functions:
         translated = []
@@ -24,6 +26,9 @@ def main():
             allocator = NaiveMIPSAllocator(translated)
             alloc_translated = allocator.allocProgram(target='x')
             translated_functions.append(alloc_translated)
+            # bb0 = alloc_translated[0]
+            # for i in bb0.instructions:
+                # print(i)
         else:
             allocator = GreedyMIPSAllocator(translated)
             alloc_translated = allocator.allocProgram(target='x')
