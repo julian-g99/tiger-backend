@@ -15,6 +15,8 @@ def main():
     allocator = None
     instructions = parse_instructions(fname)
     functions = find_functions(instructions)
+    # for i in functions[0].body():
+        # print(i)
     translated_functions = []
     for func in functions:
         translated = []
