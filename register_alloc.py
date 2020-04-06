@@ -101,6 +101,27 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
+    def getRegMaps(self, target='$t'):
+        cfg = CFG(self.program)
+        regMaps = []
+        for bb in cfg.bbs:
+            regMap = self._getBlockRegMap(bb, target=target)
+            regMaps.append({bb.pp: regMap})
+        return regMaps
+    
+    def _getBlockRegMap(self, block, target='$t'):
+        if type(target) != str:
+            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
+        if not self._canAlloc(target):
+            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+        self._resetAllocParams()
+        self.newBlock.pp = block.pp
+        self.vregs = self._getVirtualRegs(target)
+        self.pregs = self._getPhysicalRegs('$t')
+        liveranges = self._getLiveRanges(block)
+        self.regMap = self._getRegMap(liveranges)
+        return self.regMap
+
     def allocProgram(self, target='$t'):
         cfg = CFG(self.program)
         newBBs = []
@@ -298,6 +319,17 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.regPointerOffset = 0
         self.newProgram = []
 
+    def getRegMap(self, target='$t'):
+        if type(target) != str:
+            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
+        if not self._canAlloc(target):
+            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+        self._resetAllocParams()
+        self.vregs = self._getVirtualRegs(target)
+        regMap = {}
+        regMap['spill'] = self.vregs
+        return regMap
+
     def allocProgram(self, target='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
@@ -370,6 +402,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
 
 
 def main():
+    pass
     # program = [
     #     MCInstruction("label", target="main"),
     #     MCInstruction("addi", regs=["$t0", "$zero"], imm=1),
@@ -398,20 +431,20 @@ def main():
     #     MCInstruction("addi", regs=["$sp", "$sp"], imm=12),
     #     MCInstruction("jr", regs=["$ra"]),
     # ]
-    program = [
-        MCInstruction('addi', regs=['$t3', '$zero'], imm=1),
-        MCInstruction('addi', regs=['$t1', '$zero'], imm=2),
-        MCInstruction('addi', regs=['$t0', '$zero'], imm=4),
-        MCInstruction('add', regs=['$t2', '$t3', '$t1']),
-        MCInstruction('sub', regs=['$t1', '$t2', '$t3']),
-        MCInstruction('addi', regs=['$t2', '$t0'], imm=3),
-        MCInstruction('add', regs=['$t3', '$t3', '$t3']),
-        MCInstruction('add', regs=['$t2', '$t1', '$t3']),
-        MCInstruction('add', regs=['$t0', '$t1', '$t2']),
-        MCInstruction('add', regs=['$a0', '$zero', '$t0']),
-        MCInstruction('label', target='end'),
-        MCInstruction('j', target='end'),
-    ]
+    # program = [
+    #     MCInstruction('addi', regs=['$t3', '$zero'], imm=1),
+    #     MCInstruction('addi', regs=['$t1', '$zero'], imm=2),
+    #     MCInstruction('addi', regs=['$t0', '$zero'], imm=4),
+    #     MCInstruction('add', regs=['$t2', '$t3', '$t1']),
+    #     MCInstruction('sub', regs=['$t1', '$t2', '$t3']),
+    #     MCInstruction('addi', regs=['$t2', '$t0'], imm=3),
+    #     MCInstruction('add', regs=['$t3', '$t3', '$t3']),
+    #     MCInstruction('add', regs=['$t2', '$t1', '$t3']),
+    #     MCInstruction('add', regs=['$t0', '$t1', '$t2']),
+    #     MCInstruction('add', regs=['$a0', '$zero', '$t0']),
+    #     MCInstruction('label', target='end'),
+    #     MCInstruction('j', target='end'),
+    # ]
     # program = [
     #     MCInstruction('label', target='main'),
     #     MCInstruction('addi', regs=['$t0', '$zero'], imm=10),
@@ -429,28 +462,28 @@ def main():
     #     MCInstruction('j', target='exit')
     # ]
 
-    print("original code:\n")
-    for instruction in program:
-        print(instruction)
+    # print("original code:\n")
+    # for instruction in program:
+    #     print(instruction)
     
-    print("\n\nallocated code:\n")
+    # print("\n\nallocated code:\n")
 
     # nalloc = NaiveMIPSAllocator(program)
     # newProgram = nalloc.allocProgram(target='$t')
     # for instruction in newProgram:
     #     print(instruction)
-    galloc = GreedyMIPSAllocator(program)
-    newBBs = galloc.allocProgram()
-    print(newBBs)
-    pp = []
-    for bb in newBBs:
-        pp.append(bb.pp)
-    pp.sort()
-    for p in pp:
-        for bb in newBBs:
-            if bb.pp == p:
-                for instruction in bb:
-                    print(instruction)
+    # galloc = GreedyMIPSAllocator(program)
+    # newBBs = galloc.allocProgram()
+    # print(newBBs)
+    # pp = []
+    # for bb in newBBs:
+    #     pp.append(bb.pp)
+    # pp.sort()
+    # for p in pp:
+    #     for bb in newBBs:
+    #         if bb.pp == p:
+    #             for instruction in bb:
+    #                 print(instruction)
 
 
 if __name__ == "__main__":

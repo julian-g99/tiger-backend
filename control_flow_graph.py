@@ -48,7 +48,6 @@ class CFG:
         self.adjList = {}
         self.bbs = []
         self._build()
-        print(self.bbs)
     
     def _build(self):
         if len(self.program) == 0:
