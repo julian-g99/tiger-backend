@@ -2,7 +2,7 @@ from mc_instruction import MCInstruction
 from control_flow_graph import CFG, BB
 import heapq
 
-TARGETS = {'$t':10}
+PHYSICALS = {'$t':10, '$s':8}
 ZREG = '$zero'
 SPREG = '$sp'
 
@@ -56,7 +56,7 @@ class MIPSAllocator:
         return regs
 
     def _getPhysicalRegs(self, target):
-        pregCount = TARGETS[target]
+        pregCount = PHYSICALS[target]
         pregs = []
         for i in range(0, pregCount):
             pregs.append(target + str(i))
@@ -101,15 +101,15 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
-    def getRegMaps(self, target='$t'):
+    def getRegMaps(self, target='$t', physical='$t'):
         cfg = CFG(self.program)
         regMaps = []
         for bb in cfg.bbs:
-            regMap = self._getBlockRegMap(bb, target=target)
+            regMap = self._getBlockRegMap(bb, target=target, physical=physical)
             regMaps.append({bb.pp: regMap})
         return regMaps
     
-    def _getBlockRegMap(self, block, target='$t'):
+    def _getBlockRegMap(self, block, target='$t', physical='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
         if not self._canAlloc(target):
@@ -117,20 +117,20 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self._resetAllocParams()
         self.newBlock.pp = block.pp
         self.vregs = self._getVirtualRegs(target)
-        self.pregs = self._getPhysicalRegs('$t')
+        self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
         self.regMap = self._getRegMap(liveranges)
         return self.regMap
 
-    def allocProgram(self, target='$t'):
+    def allocProgram(self, target='$t', physical='$t'):
         cfg = CFG(self.program)
         newBBs = []
         for bb in cfg.bbs:
-            newBB = self._allocBlock(bb, target=target)
+            newBB = self._allocBlock(bb, target=target, physical='$t')
             newBBs.append(newBB)
         return newBBs
 
-    def _allocBlock(self, block, target='$t'):
+    def _allocBlock(self, block, target='$t', physical='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
         if not self._canAlloc(target):
@@ -138,7 +138,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self._resetAllocParams()
         self.newBlock.pp = block.pp
         self.vregs = self._getVirtualRegs(target)
-        self.pregs = self._getPhysicalRegs('$t')
+        self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
         self.regMap = self._getRegMap(liveranges)
         self.sregs = self.regMap['spill']
@@ -319,7 +319,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.regPointerOffset = 0
         self.newProgram = []
 
-    def getRegMap(self, target='$t'):
+    def getRegMap(self, target='$t', physical='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
         if not self._canAlloc(target):
@@ -330,14 +330,14 @@ class NaiveMIPSAllocator(MIPSAllocator):
         regMap['spill'] = self.vregs
         return regMap
 
-    def allocProgram(self, target='$t'):
+    def allocProgram(self, target='$t', physical='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
         if not self._canAlloc(target):
             raise ValueError("There are not enough target registers to allocate target {}".format(target))
         self._resetAllocParams()
         self.vregs = self._getVirtualRegs(target)
-        self.pregs = self._getPhysicalRegs('$t')
+        self.pregs = self._getPhysicalRegs(physical)
         for vr in self.vregs:
             self._insertStackAlloc()
         self.sregPointerOffset = 0

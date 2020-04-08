@@ -51,11 +51,11 @@ def main():
         maps = {} # The key is the line number of the leader of the basic block the register map is for. The value is the reg map
         if args.allocator == 'naive':
             allocator = NaiveMIPSAllocator(translated)
-            regMap = allocator.getRegMap(target='x')
+            regMap = allocator.getRegMap(target='x', physical='$t')
             maps[0] = regMap   
         else:
             allocator = GreedyMIPSAllocator(translated)
-            regMaps = allocator.getRegMaps(target='x')
+            regMaps = allocator.getRegMaps(target='x', physical='$s')
             maps = regMaps
         
         pp = pprint.PrettyPrinter(indent=1)
