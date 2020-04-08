@@ -54,6 +54,16 @@ class MIPSAllocator:
                     if (r[:len(target)] == target) & (r not in regs):
                         regs.append(r)
         return regs
+    
+    def _reformatRegMapSpillField(self, regMap):
+        newRegMap = {}
+        for reg in regMap.keys():
+            if reg == 'spill':
+                for sr in regMap['spill']:
+                    newRegMap[sr] = 'spill'
+            else:
+                newRegMap[reg] = regMap[reg]
+        return newRegMap
 
     def _getPhysicalRegs(self, target):
         pregCount = PHYSICALS[target]
@@ -106,6 +116,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
         regMaps = []
         for bb in cfg.bbs:
             regMap = self._getBlockRegMap(bb, target=target, physical=physical)
+            regMap = self._reformatRegMapSpillField(regMap)
             regMaps.append({bb.pp: regMap})
         return regMaps
     
@@ -328,6 +339,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.vregs = self._getVirtualRegs(target)
         regMap = {}
         regMap['spill'] = self.vregs
+        regMap = self._reformatRegMapSpillField(regMap)
         return regMap
 
     def allocProgram(self, target='$t', physical='$t'):
