@@ -1,4 +1,5 @@
 RWMEM = ['lb', 'lw', 'sb', 'sw']
+branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
 class MCInstruction:
     def __init__(self, op, regs=None, imm=None, offset=None, target=None):
@@ -14,14 +15,20 @@ class MCInstruction:
         if self.op == 'noop':
             return self.op
         if self.op in RWMEM:
-            return '{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
+            if self.offset:
+                return '{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
+            else:
+                return '{} {}, ({})'.format(self.op, self.regs[0], self.regs[1]) 
         outstr = self.op
         if self.regs != None:
             outstr += ' ' + ', '.join(self.regs)
         if self.imm != None:
             outstr += ', ' + str(self.imm)
         if self.target != None:
-            outstr += ', ' + self.target
+            if self.op in branches:
+                outstr += ', ' + self.target
+            else:
+                outstr += ' ' + self.target
         return outstr
     
     def _formatOp(self, op):

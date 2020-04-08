@@ -7,6 +7,7 @@ class Function:
         self.instructions = instructions
         self.__check_types()
         self.return_type, self.name = self.__get_rtype_and_name()
+        self.is_main = self.name == "main"
         self.args = self.__get_args()
         self.int_vals, self.int_arrs = self.__get_int_locals()
 
@@ -57,7 +58,10 @@ class Function:
             if regex.search(arg):
                 opening = arg.index("[")
                 closing = arg.index("]")
-                arrays.append((arg[: opening], arg[opening+1: closing]))
+                # arrays.append((arg[: opening], int(arg[opening+1: closing])))
+                name, size = arg[: opening], int(arg[opening+1: closing])
+                arrays.append((name, size))
+                # vals.append(name)
             else:
                 vals.append(arg)
 
