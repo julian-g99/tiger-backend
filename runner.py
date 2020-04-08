@@ -2,6 +2,7 @@ from parser import parse_instructions
 from instruction_select import find_functions, instr_to_asm
 from register_alloc import NaiveMIPSAllocator, GreedyMIPSAllocator
 import argparse
+import pprint
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--allocator', type=str, default='greedy', help='the type of register allocation to perform (\'naive\' or \'greedy\')')
@@ -57,7 +58,8 @@ def main():
             regMaps = allocator.getRegMaps(target='x')
             maps = regMaps
         
-        print(maps)
+        pp = pprint.PrettyPrinter(indent=1)
+        pp.pprint(maps)
 
     # Continue selecting from here
     

@@ -1,0 +1,10 @@
+#start_function
+void main():
+int-list: a, b, c, v[200], m[20], val2, ii, ij
+float-list:
+    assign a, 100
+    assign v, 200, 10
+
+    assign b, 200
+    add c, a, b
+#end_function
