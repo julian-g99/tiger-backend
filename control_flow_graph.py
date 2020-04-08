@@ -104,6 +104,8 @@ class CFG:
                                     nextPP += 1
                                 self._buildR(nextPP, nextBB)
                 self.bbs.append(bb)
+        else:
+            self.bbs.append(bb)
     
     def _getJumpTargetPP(self, jInstruction):
         if jInstruction.op == 'jr': # TODO: continue to think about this

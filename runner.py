@@ -60,7 +60,6 @@ def main():
             allocator = GreedyMIPSAllocator(translated)
             regMaps = allocator.getRegMaps(target='x', physical='$t')
             maps = regMaps
-
         pp = pprint.PrettyPrinter(indent=1)
         pp.pprint(maps)
 
