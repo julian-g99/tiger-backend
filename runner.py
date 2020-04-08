@@ -1,6 +1,7 @@
 from parser import parse_instructions
 from instruction_select import find_functions, instr_to_asm
 from register_alloc import NaiveMIPSAllocator, GreedyMIPSAllocator
+from second_pass import parse_function
 import argparse
 import pprint
 
@@ -49,20 +50,24 @@ def main():
 
         # Demo code for just getting register maps
         maps = {} # The key is the line number of the leader of the basic block the register map is for. The value is the reg map
+        for t in translated:
+            print(t)
         if args.allocator == 'naive':
             allocator = NaiveMIPSAllocator(translated)
             regMap = allocator.getRegMap(target='x', physical='$t')
             maps[0] = regMap   
         else:
             allocator = GreedyMIPSAllocator(translated)
-            regMaps = allocator.getRegMaps(target='x', physical='$s')
+            regMaps = allocator.getRegMaps(target='x', physical='$t')
             maps = regMaps
-        
+
         pp = pprint.PrettyPrinter(indent=1)
         pp.pprint(maps)
 
+        output = parse_function(func, maps[0])
+
     # Continue selecting from here
-    
+
     # Demo code for just getting the register maps
 
 

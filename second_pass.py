@@ -1,9 +1,12 @@
 from function import Function
-from typing import Dict
+from typing import Dict, List
 import re
 import copy
 
 from mc_instruction import MCInstruction
+
+def spill_count(reg_map: Dict[str, str]) -> int:
+    return len(reg_map["spill"])
 
 def saved_count(reg_map: Dict[str, str]):
     pattern = r'^\$s[01234567]$'
@@ -14,7 +17,7 @@ def saved_count(reg_map: Dict[str, str]):
 
     return count
 
-def needs_pad(spill_count: int, arrs: List[(str, int)], saved_count: int) -> bool:
+def needs_pad(spill_count: int, arrs, saved_count: int) -> bool:
     """
     Computes the stack size using given information
 
@@ -164,13 +167,16 @@ def parse_function(function: Function, reg_map: Dict[str, str]):
     output = []
 
     # calling convention prologue
+    prologue, offsets = calling_convention(function, spill_count, num_saved)
 
     # body
     body = function.body
     for instr in body:
-        output += convert_instr(instr)
+        output += convert_instr(reg_map, instr, offsets)
 
     # calling convention epilogue
+
+    return output
 
 def test():
     reg_map = {"x0": "$t0", "x1": "$s10", "x2": "$s7", "x3": "$s3"}
