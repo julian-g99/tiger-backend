@@ -6,18 +6,24 @@ import copy
 from mc_instruction import MCInstruction
 
 def spill_count(reg_map: Dict[str, str]) -> int:
-    return len(reg_map["spill"])
+    count = 0
+    # FIXME: same as below
+    for k, v in reg_map.items():
+        if v == "spill":
+            count += 1
+    return count
 
 def saved_count(reg_map: Dict[str, str]):
     pattern = r'^\$s[01234567]$'
     count = 0
+    # FIXME: make this work with all the maps in the map
     for k, v in reg_map.items():
         if re.search(pattern, v):
             count += 1
 
     return count
 
-def needs_pad(spill_count: int, arrs, saved_count: int) -> bool:
+def needs_pad(spilled_regs: int, arrs, saved_regs: int) -> bool:
     """
     Computes the stack size using given information
 
@@ -33,7 +39,7 @@ def needs_pad(spill_count: int, arrs, saved_count: int) -> bool:
     fp = 1
     arr_length = sum(length for _, length in arrs)
     ra = 1
-    total = (fp + arr_length + spill_count + ra + saved_count) * 4
+    total = (fp + arr_length + spilled_regs + ra + saved_regs) * 4
 
     return total % 2 == 1
     # if total % 2 == 0:
@@ -63,6 +69,8 @@ def calling_convention(function: Function, spill_count: int, saved_regs: int) ->
     offsets = {}
     sp = "$sp"
     fp = "$fp"
+
+    # print("%d" % spill_count)
 
     # # move sp down
     # stack_size, need_pad = stack_size(spill_count, function.int_arrs, saved_regs)
@@ -162,17 +170,22 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
 
 
 def parse_function(function: Function, reg_map: Dict[str, str]):
+    # print(reg_map)
     num_saved = saved_count(reg_map)
     int_arrs = function.int_arrs
     output = []
 
     # calling convention prologue
-    prologue, offsets = calling_convention(function, spill_count, num_saved)
+    prologue, offsets = calling_convention(function, spill_count(reg_map), num_saved)
+    # print(offsets)
+    output += prologue
 
     # body
-    body = function.body
+    body = function.body()
     for instr in body:
-        output += convert_instr(reg_map, instr, offsets)
+        converted = convert_instr(reg_map, instr, offsets)
+        output += converted
+        # print(converted)
 
     # calling convention epilogue
 
@@ -185,3 +198,4 @@ def test():
 
 if __name__ == "__main__":
     test()
+

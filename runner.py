@@ -50,8 +50,6 @@ def main():
 
         # Demo code for just getting register maps
         maps = {} # The key is the line number of the leader of the basic block the register map is for. The value is the reg map
-        for t in translated:
-            print(t)
         if args.allocator == 'naive':
             allocator = NaiveMIPSAllocator(translated)
             regMap = allocator.getRegMap(target='x', physical='$t')
@@ -60,10 +58,8 @@ def main():
             allocator = GreedyMIPSAllocator(translated)
             regMaps = allocator.getRegMaps(target='x', physical='$t')
             maps = regMaps
-        pp = pprint.PrettyPrinter(indent=1)
-        pp.pprint(maps)
 
-        output = parse_function(func, maps[0])
+        output = parse_function(func, maps[0][0])
 
     # Continue selecting from here
 
