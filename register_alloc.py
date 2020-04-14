@@ -111,14 +111,16 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
-    def getRegMaps(self, target='$t', physical='$t'):
-        cfg = CFG(self.program)
+    def mapMCFunction(self, function, target='$t', physical='$t'):
+        cfg = CFG(function.body)
         regMaps = []
+        self.program = function.body
         for bb in cfg.bbs:
             regMap = self._getBlockRegMap(bb, target=target, physical=physical)
             regMap = self._reformatRegMapSpillField(regMap)
             regMaps.append({bb.pp: regMap})
-        return regMaps
+        function.set_reg_maps(regMaps)
+        function.set_bbs(cfg.bbs)
     
     def _getBlockRegMap(self, block, target='$t', physical='$t'):
         if type(target) != str:
@@ -330,17 +332,19 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.regPointerOffset = 0
         self.newProgram = []
 
-    def getRegMap(self, target='$t', physical='$t'):
+    def mapMCFunction(self, function, target='$t', physical='$t'):
         if type(target) != str:
             raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
         if not self._canAlloc(target):
             raise ValueError("There are not enough target registers to allocate target {}".format(target))
         self._resetAllocParams()
+        self.program = function.body
         self.vregs = self._getVirtualRegs(target)
         regMap = {}
         regMap['spill'] = self.vregs
         regMap = self._reformatRegMapSpillField(regMap)
-        return regMap
+        function.set_reg_maps({0: regMap})
+        function.set_bbs([BB(0, instructions=function.body)])
 
     def allocProgram(self, target='$t', physical='$t'):
         if type(target) != str:
