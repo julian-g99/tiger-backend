@@ -37,11 +37,7 @@ def main():
 
     # Continue selecting from here
     for function in mc_functions:
-        reg_maps = function.reg_maps
-        for reg_map in reg_maps:
-            for k, v in reg_map.items():
-                print(k, v)
-        # parse_function(function)
+        parse_function(function)
 
     # Demo code for just getting the register maps
 

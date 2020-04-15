@@ -12,35 +12,55 @@ class MCFunction:
 
     def set_bbs(self, bbs):
         self.bbs = bbs
+        self.calls_others = calls_others(bbs)
+        if self.reg_maps is not None:
+            self.stack_type = self.get_stack_type()
 
     def set_reg_maps(self, reg_maps):
         self.reg_maps = reg_maps
+        self.saved_regs = get_saved_regs(self.reg_maps)
+        self.spill_regs = get_spill_regs(self.reg_maps)
+        if self.bbs is not None:
+            self.stack_type = self.get_stack_type()
 
-    def get_saved_count(self):
-        assert(self.reg_maps is not None)
+    def get_stack_type(self):
+        assert(self.saved_regs is not None)
+        assert(self.spill_regs is not None)
+        assert(self.calls_others is not None)
 
-    def calls_others(self):
-        for instr in self.body:
-            if instr.op == "ja": # TODO: check if this op is correct
-                return True
-        return False
-
-    def has_data(self):
-        assert(self.reg_maps is not None)
-        assert(self.bbs is not None)
-
-        s_regs_pattern = re.compile("\$s\d")
-        spill_count = 0
-        seen_saved = set()
-        for reg_map in self.reg_maps:
-            for bbid, rm in reg_map.items():
-                for ir_name, mc_name in rm.items():
-                    if s_regs_pattern.match(mc_name):
-                        seen_saved.add(mc_name)
-                    elif mc_name == "spill":
-                        spill_count += 1
-
-        if spill_count == 0 and len(seen_saved) == 0:
-            return False
+        if self.calls_others:
+            return "nonleaf"
+        elif len(self.saved_regs) != 0 or len(self.spill_regs) != 0:
+            return "data leaf"
         else:
-            return True
+            return "simple leaf"
+
+    @staticmethod
+    def get_saved_regs(reg_maps):
+        saved_regs = set()
+        saved_pattern = re.compile("\$s\d+")
+        for reg_map in reg_maps:
+            for _, mp in reg_map.items():
+                for _, reg in mp.items():
+                    if saved_pattern.match(reg):
+                        saved_regs.add(reg)
+        return saved_regs
+
+    @staticmethod
+    def get_spill_regs(reg_maps):
+        spill_regs = set()
+        for reg_map in reg_maps:
+            for _, mp in reg_map.items():
+                for ir, mc in mp.items():
+                    if mc == "spill":
+                        spill_regs.add(ir)
+        return spill_regs
+
+    @staticmethod
+    def calls_others(bbs):
+        for bb in bbs:
+            for instr in bb:
+                if instr.op == "ja":
+                    return True
+
+        return False

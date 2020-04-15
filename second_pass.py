@@ -24,23 +24,20 @@ def saved_count(reg_map: Dict[str, str]):
 
     return count
 
-def needs_pad(spilled_regs: int, arrs, saved_regs: int) -> bool:
+def needs_pad(function: MCFunction) -> bool:
     """
     Computes the stack size using given information
 
     Args:
-        spill_count: the number of virtual registers that needs to be spilled (i.e., the number of local variables to be stored on the stack)
-        arrs: the arrays in the function
-        saved_count: the number of saved registers that this function uses
+        function: The MC Function that is being checked
 
     Returns:
-        the stack size
         whether padding is needed
     """
     fp = 1
-    arr_length = sum(length for _, length in arrs)
+    arr_length = sum(length for _, length in function.int_arrs)
     ra = 1
-    total = (fp + arr_length + spilled_regs + ra + saved_regs) * 4
+    total = (fp + arr_length + function.spilled_regs + ra + function.saved_regs) * 4
 
     return total % 2 == 1
     # if total % 2 == 0:
@@ -62,7 +59,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         A list of MCInstruction
         A dictionary map of spilled virtual register names to its location on the stack
     """
-    if function.stack_type == "simple_leaf":
+    if function.stack_type() == "simple_leaf":
         return None
     # prologue of the calling convention
     prologue = []
@@ -90,7 +87,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     # FIXME: save the s registers
 
     # if curr_offset + function.saved_regs_count % 2 == 1:
-    if needs_pad(spill_count, function.int_arrs, saved_regs):
+    if needs_pad(function):
         prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=4)) # is this consistent with register alloc
 
     # prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=function.saved_regs_count*4))
