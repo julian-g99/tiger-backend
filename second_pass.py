@@ -1,4 +1,5 @@
 from function import Function
+from mc_function import MCFunction
 from typing import Dict, List
 import re
 import copy
@@ -47,7 +48,7 @@ def needs_pad(spilled_regs: int, arrs, saved_regs: int) -> bool:
     # else:
         # return total + 1, True
 
-def calling_convention(function: Function, spill_count: int, saved_regs: int) -> (List[MCInstruction], Dict[str, int]):
+def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCInstruction], Dict[str, int]):
     """
     Handles the callee portion of the calling convention for a particular function. Note that this does not handle any of the caller responsibilities. Those should be handled by the code that deals with `call` and `callr` instructions.
 
@@ -61,21 +62,13 @@ def calling_convention(function: Function, spill_count: int, saved_regs: int) ->
         A list of MCInstruction
         A dictionary map of spilled virtual register names to its location on the stack
     """
-    assert(saved_regs == 0)
     if function.stack_type == "simple_leaf":
-        return []
+        return None
     # prologue of the calling convention
     prologue = []
     offsets = {}
     sp = "$sp"
     fp = "$fp"
-
-    # print("%d" % spill_count)
-
-    # # move sp down
-    # stack_size, need_pad = stack_size(spill_count, function.int_arrs, saved_regs)
-    # print("stack size: %d, need pad: %s" % (stack_size, need_pad))
-    # prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=-stack_size)) # note the negative sign here
 
     # make space for fp and save
     prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=-4))
@@ -168,28 +161,20 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
 
     return output
 
+def translate_body(function: MCFunction):
+    for bb in function.bbs:
+        for instr in bb:
+            print(instr)
+            # FIXME: change this to actually translate the function, might want to refactor convert_instr first
 
-def parse_function(function: Function, reg_map: Dict[str, str]):
+def parse_function(function: MCFunction):
     # print(reg_map)
-    num_saved = saved_count(reg_map)
-    int_arrs = function.int_arrs
-    output = []
+    assert(len(function.reg_maps) == len(function.bbs))
 
-    # calling convention prologue
-    prologue, offsets = calling_convention(function, spill_count(reg_map), num_saved)
-    # print(offsets)
-    output += prologue
-
-    # body
-    body = function.body()
-    for instr in body:
-        converted = convert_instr(reg_map, instr, offsets)
-        output += converted
-        # print(converted)
-
-    # calling convention epilogue
-
-    return output
+    # prologue = get_prologue(function)
+    prologue, epilogue, offsets = calling_convention(function)
+    #NOTE: if the return value above is None that means it's a simple leaf
+    translated_body = translate_body(function)
 
 def test():
     reg_map = {"x0": "$t0", "x1": "$s10", "x2": "$s7", "x3": "$s3"}
