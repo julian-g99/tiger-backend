@@ -113,12 +113,12 @@ class GreedyMIPSAllocator(MIPSAllocator):
 
     def mapMCFunction(self, function, target='$t', physical='$t'):
         cfg = CFG(function.body)
-        regMaps = []
+        regMaps = {}
         self.program = function.body
         for bb in cfg.bbs:
             regMap = self._getBlockRegMap(bb, target=target, physical=physical)
             regMap = self._reformatRegMapSpillField(regMap)
-            regMaps.append({bb.pp: regMap})
+            regMaps[bb.pp] = regMap
         function.set_reg_maps(regMaps)
         function.set_bbs(cfg.bbs)
     
