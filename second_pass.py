@@ -1,4 +1,5 @@
 from function import Function
+from first_pass import is_constant
 from mc_function import MCFunction
 from typing import Dict, List
 import re
@@ -156,25 +157,47 @@ def spill(spill_count: int, reg_map: Dict[str, str], ir_regs: [str], offsets: Di
 
 
 def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
-    output = []
+    # TODO: assume the caller's stack is already even, add padding if the number of args that need to be passed through the stack is odd
+    if instr.op != "callr" and instr.op != "call":
+        output = []
 
-    # orig_regs = instr.regs
-    # copy = copy.deepcopy(instr)
-    # copy.regs = [reg_map[r] for r in copy.regs]
-    # spill_count = copy.regs.count("spill")
-    spill_count = list(reg_map.values()).count("spill")
+        spill_count = list(reg_map.values()).count("spill")
 
-    if spill_count != 0:
-        spill_load, spill_map = spill(spill_count, reg_map, instr.regs, offsets, load=True)
-        output += spill_load
-        # for i in range(len(copy.regs)):
-            # if copy.regs[i] == "spill":
-                # copy.regs[i] = spill_map[orig_regs[i]]
-        new_regs = [spill_map[r] for r in instr.regs]
+        if spill_count != 0:
+            spill_load, spill_map = spill(spill_count, reg_map, instr.regs, offsets, load=True)
+            output += spill_load
+            # for i in range(len(copy.regs)):
+                # if copy.regs[i] == "spill":
+                    # copy.regs[i] = spill_map[orig_regs[i]]
+            new_regs = [spill_map[r] for r in instr.regs]
 
-        spill_store, _ = spill(spill_count, reg_map, instr.regs, offsets, load=False)
+            spill_store, _ = spill(spill_count, reg_map, instr.regs, offsets, load=False)
 
-    return output
+        return output
+    else:
+        output = []
+        # count the number of arguments
+        num_args = len(instr.arguments)
+        if num_args <= 4:
+            curr_reg = 0
+            for arg in instr.arguments:
+                arg_reg = "$a%d" % curr_reg
+                curr_reg += 1
+                # TODO: cases to consider:
+                    # 1. arg is immediate value
+                    # 2. arg is in a physical register
+                    # 3. arg is on the stack as a local variable (i.e., it's spilled)
+                    # 4. arg is on the stack as an array value
+                # FIXME: using the cases above, move the value of arg into arg_reg
+        else:
+            curr_reg = 0
+            for i in range(4):
+                # TODO: do the same as above
+                arg_reg = "%a%d" % curr_reg
+                curr_reg += 1
+
+            # TODO: store the rest on the stack
+
 
 def translate_body(function: MCFunction):
     # for bb in function.bbs:

@@ -2,14 +2,19 @@ RWMEM = ['lb', 'lw', 'sb', 'sw']
 branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
 class MCInstruction:
-    def __init__(self, op, regs=None, imm=None, offset=None, target=None):
+    def __init__(self, op, regs=None, imm=None, offset=None, target=None,
+                 function_name=None, arguments=None):
         self.op = self._formatOp(op)
         self.regs = self._formatRegs(regs)
         self.imm = imm
         self.offset = offset
         self.target = target
-    
+
     def __str__(self):
+        if self.op == "call" or self.op == "callr":
+            assert(self.function_name is not None)
+            assert(self.arguments is not None)
+            return self.op + self.function_name + ", " + ", ".join(self.arguments)
         if self.op == 'label':
             return self.target + ':'
         if self.op == 'noop':
@@ -30,12 +35,12 @@ class MCInstruction:
             else:
                 outstr += ' ' + self.target
         return outstr
-    
+
     def _formatOp(self, op):
         if op == None:
             return op
         return op.lower()
-    
+
     def _formatRegs(self, reg):
         if reg == None:
             return None
