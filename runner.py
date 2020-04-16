@@ -37,7 +37,7 @@ def main():
 
     # Continue selecting from here
     for function in mc_functions:
-        parse_function(function)
+        res = parse_function(function)
 
     # Demo code for just getting the register maps
 

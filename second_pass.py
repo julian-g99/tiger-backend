@@ -6,24 +6,6 @@ import copy
 
 from mc_instruction import MCInstruction
 
-def spill_count(reg_map: Dict[str, str]) -> int:
-    count = 0
-    # FIXME: same as below
-    for k, v in reg_map.items():
-        if v == "spill":
-            count += 1
-    return count
-
-def saved_count(reg_map: Dict[str, str]):
-    pattern = r'^\$s[01234567]$'
-    count = 0
-    # FIXME: make this work with all the maps in the map
-    for k, v in reg_map.items():
-        if re.search(pattern, v):
-            count += 1
-
-    return count
-
 def needs_pad(function: MCFunction) -> bool:
     """
     Computes the stack size using given information
@@ -37,13 +19,11 @@ def needs_pad(function: MCFunction) -> bool:
     fp = 1
     arr_length = sum(length for _, length in function.int_arrs)
     ra = 1
-    total = (fp + arr_length + function.spilled_regs + ra + function.saved_regs) * 4
+    spill_count = len(function.spill_regs)
+    saved_count = len(function.saved_regs)
+    total = fp + arr_length + spill_count + ra + saved_count
 
     return total % 2 == 1
-    # if total % 2 == 0:
-        # return total, False
-    # else:
-        # return total + 1, True
 
 def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCInstruction], Dict[str, int]):
     """
@@ -59,7 +39,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         A list of MCInstruction
         A dictionary map of spilled virtual register names to its location on the stack
     """
-    if function.stack_type() == "simple_leaf":
+    if not function.has_data:
         return None
     # prologue of the calling convention
     prologue = []
@@ -67,36 +47,74 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     sp = "$sp"
     fp = "$fp"
 
+    # prologue
+
     # make space for fp and save
-    prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=-4))
+    prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+    prologue.append(MCInstruction("sw", regs=[fp, sp], offset=0))
     prologue.append(MCInstruction("move", regs=[fp, sp]))
 
     # make space for array
     curr_offset = -4
     for arr in function.int_arrs:
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=arr[1]*4)) # arr[1] should the size
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-arr[1]*4)) # arr[1] should the size
         offsets[arr[0]] = curr_offset
         curr_offset -= arr[1] * 4
 
     # make space for local variables
-    for val in function.int_vals:
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=-4))
-        offsets[val] = curr_offset
+    if len(function.spill_regs) != 0:
+        for val in function.int_vals:
+            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            offsets[val] = curr_offset
+            curr_offset -= 4
+
+    # padding
+    if needs_pad(function):
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
         curr_offset -= 4
 
-    # FIXME: save the s registers
+    # return address
+    prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+    prologue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
 
-    # if curr_offset + function.saved_regs_count % 2 == 1:
+    # s registers
+    for s in function.saved_regs:
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        prologue.append(MCInstruction("sw", regs=[s, sp], offset=0)) # TODO: check if this is how the mc function is filled
+        offsets[s] = curr_offset
+        curr_offset -= 4
+
+
+    # epilogue
+    epilogue = []
+
+    # restore the s registers
+    for s in function.saved_regs[::-1]:
+        epilogue.append(MCInstruction("lw", regs=[s, sp], offest=0))
+        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    # restore the return address
+    epilogue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
+    epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    # skip over padding if it's there
     if needs_pad(function):
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=4)) # is this consistent with register alloc
+        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
-    # prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=function.saved_regs_count*4))
-    # curr_offset += function.saved_regs_count
+    # tear down the local variables
+    if len(function.spill_regs) != 0:
+        spill_count = len(function.spill_regs)
+        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4*spill_count))
 
-    # for i in range(function.saved_regs_count):
-        # prologue.append(MCInstruction("sw", regs=["$sp", "$sp"], offset=i*4))
+    # tear down the array
+    for arr in function.int_arrs:
+        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=arr[1]*4))
 
-    return prologue, offsets
+    # restore the fp
+    epilogue.append(MCInstruction("lw", regs=[fp, sp], offset=0))
+    epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    return prologue, epilogue, offsets
 
 
 def spill(spill_count: int, reg_map: Dict[str, str], ir_regs: [str], offsets: Dict[str, int], load: bool) -> (List[MCInstruction], Dict[str, str]):
@@ -159,10 +177,11 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
     return output
 
 def translate_body(function: MCFunction):
-    for bb in function.bbs:
-        for instr in bb:
-            print(instr)
-            # FIXME: change this to actually translate the function, might want to refactor convert_instr first
+    # for bb in function.bbs:
+        # for instr in bb:
+            # # FIXME: change this to actually translate the function, might want to refactor convert_instr first
+
+    return function.body
 
 def parse_function(function: MCFunction):
     # print(reg_map)
@@ -173,11 +192,22 @@ def parse_function(function: MCFunction):
     #NOTE: if the return value above is None that means it's a simple leaf
     translated_body = translate_body(function)
 
+    res = prologue + translated_body + epilogue
+
+    for i in prologue:
+        print(i)
+    print()
+    for i in translated_body:
+        print(i)
+    print()
+    for i in epilogue:
+        print(i)
+
+    return res
+
 def test():
-    reg_map = {"x0": "$t0", "x1": "$s10", "x2": "$s7", "x3": "$s3"}
-    print(saved_count(reg_map))
+    i = 0 # using this as nop
 
 
 if __name__ == "__main__":
     test()
-

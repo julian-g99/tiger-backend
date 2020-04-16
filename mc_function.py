@@ -8,32 +8,35 @@ class MCFunction:
         self.int_arrs = int_arrs
 
         self.body = instrs
+        self.bbs = None
+        self.reg_maps = None
 
 
     def set_bbs(self, bbs):
         self.bbs = bbs
-        self.calls_others = calls_others(bbs)
+        self.calls_others = MCFunction.calls_others(bbs)
         if self.reg_maps is not None:
-            self.stack_type = self.get_stack_type()
+            self.has_data = self.has_data()
 
     def set_reg_maps(self, reg_maps):
         self.reg_maps = reg_maps
-        self.saved_regs = get_saved_regs(self.reg_maps)
-        self.spill_regs = get_spill_regs(self.reg_maps)
+        self.saved_regs = MCFunction.get_saved_regs(self.reg_maps)
+        self.spill_regs = MCFunction.get_spill_regs(self.reg_maps)
         if self.bbs is not None:
-            self.stack_type = self.get_stack_type()
+            self.has_data = self.has_data()
 
-    def get_stack_type(self):
+    def has_data(self):
         assert(self.saved_regs is not None)
         assert(self.spill_regs is not None)
         assert(self.calls_others is not None)
 
-        if self.calls_others:
-            return "nonleaf"
-        elif len(self.saved_regs) != 0 or len(self.spill_regs) != 0:
-            return "data leaf"
-        else:
-            return "simple leaf"
+        return len(self.saved_regs) != 0 or len(self.spill_regs) != 0
+        # if self.calls_others:
+            # return "nonleaf"
+        # elif len(self.saved_regs) != 0 or len(self.spill_regs) != 0:
+            # return "data leaf"
+        # else:
+            # return "simple leaf"
 
     @staticmethod
     def get_saved_regs(reg_maps):
@@ -44,7 +47,9 @@ class MCFunction:
                 for _, reg in mp.items():
                     if saved_pattern.match(reg):
                         saved_regs.add(reg)
-        return saved_regs
+        output = list(saved_regs)
+        output.sort()
+        return output
 
     @staticmethod
     def get_spill_regs(reg_maps):
