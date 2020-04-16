@@ -10,21 +10,21 @@ class BB:
         else:
             self.instructions = instructions
         self.pp = pp
-    
+
     def __iter__(self):
         return BBIterator(self)
-    
+
     def __len__(self):
         return len(self.instructions)
-    
+
     def __getitem__(self, item):
         return self.instructions[item]
-    
+
     def getLeader(self):
         if len(self.instructions) > 0:
             return self.instruction[0]
         raise LookupError("Basic Block is empty and thus has no leader")
-    
+
     def addInstruction(self, instruction):
         if type(instruction) != MCInstruction:
             raise TypeError("instruction must be of type MCInstruction. Got {}.".format(type(instruction)))
@@ -34,7 +34,7 @@ class BBIterator:
     def __init__(self, bb):
         self.bb = bb
         self._index = 0
-    
+
     def __next__(self):
         if self._index < len(self.bb):
             result = self.bb[self._index]
@@ -48,14 +48,14 @@ class CFG:
         self.adjList = {}
         self.bbs = []
         self._build()
-    
+
     def _build(self):
         if len(self.program) == 0:
             return None
         bb = BB(0, instructions=[self.program[0]])
         self.adjList[bb.pp] = []
         self._buildR(1, bb)
-    
+
     def _buildR(self, pp, bb):
         if pp < len(self.program):
             instruction = self.program[pp]
@@ -106,7 +106,7 @@ class CFG:
                 self.bbs.append(bb)
         else:
             self.bbs.append(bb)
-    
+
     def _getJumpTargetPP(self, jInstruction):
         if jInstruction.op == 'jr': # TODO: continue to think about this
             raise ValueError("CFG class can only build inner function control graphs. The jr instruction is treated as the end of the CFG, not a jtype instruction.")
@@ -178,8 +178,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-            
-        
