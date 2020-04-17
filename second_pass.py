@@ -9,7 +9,7 @@ from mc_instruction import MCInstruction
 
 def needs_pad(function: MCFunction) -> bool:
     """
-    Computes the stack size using given information
+    Computes the stack size using given information and returns whether padding is needed (since sp needs to be a multiple of 8)
 
     Args:
         function: The MC Function that is being checked
@@ -177,6 +177,14 @@ def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruc
     return save_code, restore_code
 
 def convert_intrinsic(instr: MCInstruction) -> List[MCInstruction]:
+    """
+    Converts an intrinsic function call to use the relevant syscall. Note that v0 and a0 is always saved and restored, regardless of whether these registers are actually used in the function.
+    
+    Args:
+        - instr: the instruction to be translated
+    Returns:
+        - a list of instructions equivalent to the intrinsic function
+    """
     sys_codes = {"print_int": 1,
                 "print_float": 2,
                 "print_double": 3,
@@ -264,7 +272,15 @@ def convert_intrinsic(instr: MCInstruction) -> List[MCInstruction]:
         raise ValueError("Unexpected intrinsic function")
 
 
+#NOTE: this function is not fully implemented
 def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
+    """
+    Convert a single instruction from using virtual register to physical register. Also, if this instruction is `call` or `callr`, then it's also changed to an actual machine instruction.
+    Args:
+        - instr: the instruction to be changed
+    Return:
+        - a list of instruction that's equivalent
+    """
     # TODO: assume the caller's stack is already even, add padding if the number of args that need to be passed through the stack is odd
     output = []
     # count the number of arguments
@@ -290,6 +306,7 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
         # TODO: store the rest on the stack
 
     # NOTE: this if is at this level because the args and dests still need to be translated to physical registers first
+    # FIXME: implement the rest of this. Right now only intrinsics is done
     if instr.op != "callr" and instr.op != "call":
         intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
         if instr.name in intrinsics:
@@ -310,14 +327,29 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
 
     return output
 
-def translate_body(function: MCFunction):
+def translate_body(function: MCFunction) -> List[MCInstruction]:
+    """
+    Translates the body of a function one by one. Should call methods like convert_instr.
+
+    Args:
+        - function: the MCFunction to be translated
+    Returns:
+        - the translated output (does not include the prologue and epilogue)
+    """
     # for bb in function.bbs:
         # for instr in bb:
             # # FIXME: change this to actually translate the function, might want to refactor convert_instr first
 
     return function.body
 
-def parse_function(function: MCFunction):
+def parse_function(function: MCFunction) -> List[MCInstruction]:
+    """
+    Parses an MCFunction to a list of machine instructions. This should be the final product that can be outputted to a file.
+    Args:
+        - function: an MCFunction object
+    Return:
+        - a list of mc instructions
+    """
     # print(reg_map)
     assert(len(function.reg_maps) == len(function.bbs))
 
