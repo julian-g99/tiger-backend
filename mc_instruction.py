@@ -3,7 +3,7 @@ branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
 class MCInstruction:
     def __init__(self, op, regs=None, imm=None, offset=None, target=None,
-                 function_name=None, arguments=None):
+                 function_name=None, arguments=None, return_dest=None):
         self.op = self._formatOp(op)
         self.regs = self._formatRegs(regs)
         self.imm = imm
@@ -11,10 +11,18 @@ class MCInstruction:
         self.target = target
 
     def __str__(self):
-        if self.op == "call" or self.op == "callr":
+        # NOTE: call and callr should never remain in the final output, so their string representation is mostly for debugging
+        if self.op == "call":
             assert(self.function_name is not None)
             assert(self.arguments is not None)
-            return self.op + self.function_name + ", " + ", ".join(self.arguments)
+            return "call:\n\
+                    function_name: {}, arguments:{}".format(self.function_name, self.arguments)
+        if self.op == "callr":
+            assert(self.function_name is not None)
+            assert(self.arguments is not None)
+            assert(self.return_dest is not None)
+            return "callr:\n\
+                    return_dest: {}, function_name: {}, arguments:{}".format(self.return_dest, self.function_name, self.arguments)
         if self.op == 'label':
             return self.target + ':'
         if self.op == 'noop':

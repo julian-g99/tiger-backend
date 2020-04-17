@@ -272,7 +272,16 @@ def convert_label(instr: IRInstruction):
 def convert_calls(instr: IRInstruction):
     # NOTE: this is temporary and should not ever end up in the final output
     assert(instr.instruction_type == "call" or instr.instruction_type == "callr")
-    return MCInstruction(instr.instruction_type, function_name=instr.argument_list[0], arguments=instr.argument_list[1:])
+    if instr.instruction_type == "call":
+        function_name = instr.argument_list[0]
+        arguments = instr.argument_list[1:]
+        return MCInstruction("call", function_name=function_name, arguments=arguments)
+    else:
+        return_dest = instr.argument_list[0]
+        function_name = instr.argument_list[1]
+        arguments = instr.argument_list[2:]
+        return MCInstruction("callr", return_dest=return_dest, function_name=function_name, arguments=arguments)
+
 
 
 def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:

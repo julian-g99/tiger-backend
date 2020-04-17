@@ -1,7 +1,7 @@
 from function import Function
 from first_pass import is_constant
 from mc_function import MCFunction
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import re
 import copy
 
@@ -22,6 +22,7 @@ def needs_pad(function: MCFunction) -> bool:
     ra = 1
     spill_count = len(function.spill_regs)
     saved_count = len(function.saved_regs)
+    arg_count = arg_space(function)
     total = fp + arr_length + spill_count + ra + saved_count
 
     return total % 2 == 1
@@ -155,10 +156,144 @@ def spill(spill_count: int, reg_map: Dict[str, str], ir_regs: [str], offsets: Di
 
     return output, reg_map
 
+def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruction]]:
+    """
+    Computes the save and restore code for a single register.
+    Args:
+        - reg_name: the register to be saved and restored, make sure this is a physical register
+    Returns:
+        - a tuple of list of instructions. The first of which is the save code, the second is the restore code
+    """
+    save_code = []
+    restore_code = []
+    sp = "$sp"
+
+    save_code.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+    save_code.append(MCInstruction("sw", regs=[reg_name, sp], offset=0))
+
+    restore_code.append(MCInstruction("lw", regs=[reg_name, sp], offset=0))
+    restore_code.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    return save_code, restore_code
+
+def convert_intrinsic(instr: MCInstruction) -> List[MCInstruction]:
+    sys_codes = {"print_int": 1,
+                "print_float": 2,
+                "print_double": 3,
+                "print_string": 4,
+                "read_int": 5,
+                "raed_float": 6,
+                "read_double": 7,
+                "read_string": 8,
+                "sbrk": 9,
+                "exit": 10,
+                "print_char": 11}
+    output = []
+    op = instr.op
+    if op == "geti" or op == "getc": # CHECK: does getc and geti actually work in the same way?
+        dest = instr.dest
+
+        # saving v0
+        save, restore = save_and_restore("$v0")
+        output += save
+
+        # moving syscode into v0
+        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["read_int"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # moving output into destination
+        output.append(MCInstruction("move", regs=[dest, "$v0"]))
+
+        # restoring v0
+        output += restore
+    elif op == "getf":
+        raise NotImplementedError("getf() isn't implemented as floats are not supported")
+    elif op == "puti":
+        arg = instr.arguments[0]
+
+        # saving a0 and v0
+        save_a0, restore_a0 = save_and_restore("$a0")
+        save_v0, restore_v0 = save_and_restore("$v0")
+        output += save_a0
+        output += save_v0
+
+        # moving argument into a0
+        if is_constant(arg):
+            output.append(MCInstruction("move", regs=["$a0"], imm=arg))
+        else:
+            output.append(MCInstruction("move", regs=["$a0", arg]))
+
+        # moving syscode into v0
+        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["print_int"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # restoring a0 and v0
+        output += restore_v0
+        output += restore_a0
+    elif op == "putf":
+        raise NotImplementedError("putf() isn't implemented as floats are not supported")
+    elif op == "putc":
+        arg = instr.arguments[0]
+
+        # saving a0 and v0
+        save_a0, restore_a0 = save_and_restore("$a0")
+        save_v0, restore_v0 = save_and_restore("$v0")
+        output += save_a0
+        output += save_v0
+
+        # moving argument into a0
+        if is_constant(arg):
+            output.append(MCInstruction("move", regs=["$a0"], imm=arg))
+        else:
+            output.append(MCInstruction("move", regs=["$a0", arg]))
+
+        # moving syscode into v0
+        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["print_char"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # restoring a0 and v0
+        output += restore_v0
+        output += restore_a0
+    else:
+        raise ValueError("Unexpected intrinsic function")
+
 
 def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
     # TODO: assume the caller's stack is already even, add padding if the number of args that need to be passed through the stack is odd
+    output = []
+    # count the number of arguments
+    num_args = len(instr.arguments)
+    if num_args <= 4:
+        curr_reg = 0
+        for arg in instr.arguments:
+            arg_reg = "$a%d" % curr_reg
+            curr_reg += 1
+            # TODO: cases to consider:
+                # 1. arg is immediate value
+                # 2. arg is in a physical register
+                # 3. arg is on the stack as a local variable (i.e., it's spilled)
+                # 4. arg is on the stack as an array value
+            # FIXME: using the cases above, move the value of arg into arg_reg
+    else:
+        curr_reg = 0
+        for i in range(4):
+            # TODO: do the same as above
+            arg_reg = "%a%d" % curr_reg
+            curr_reg += 1
+
+        # TODO: store the rest on the stack
+
+    # NOTE: this if is at this level because the args and dests still need to be translated to physical registers first
     if instr.op != "callr" and instr.op != "call":
+        intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
+        if instr.name in intrinsics:
+            convert_intrinsic(instr)
         output = []
 
         spill_count = list(reg_map.values()).count("spill")
@@ -173,31 +308,7 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
 
             spill_store, _ = spill(spill_count, reg_map, instr.regs, offsets, load=False)
 
-        return output
-    else:
-        output = []
-        # count the number of arguments
-        num_args = len(instr.arguments)
-        if num_args <= 4:
-            curr_reg = 0
-            for arg in instr.arguments:
-                arg_reg = "$a%d" % curr_reg
-                curr_reg += 1
-                # TODO: cases to consider:
-                    # 1. arg is immediate value
-                    # 2. arg is in a physical register
-                    # 3. arg is on the stack as a local variable (i.e., it's spilled)
-                    # 4. arg is on the stack as an array value
-                # FIXME: using the cases above, move the value of arg into arg_reg
-        else:
-            curr_reg = 0
-            for i in range(4):
-                # TODO: do the same as above
-                arg_reg = "%a%d" % curr_reg
-                curr_reg += 1
-
-            # TODO: store the rest on the stack
-
+    return output
 
 def translate_body(function: MCFunction):
     # for bb in function.bbs:
