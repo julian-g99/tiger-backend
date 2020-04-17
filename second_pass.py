@@ -22,7 +22,7 @@ def needs_pad(function: MCFunction) -> bool:
     ra = 1
     spill_count = len(function.spill_regs)
     saved_count = len(function.saved_regs)
-    arg_count = arg_space(function)
+    # arg_count = arg_space(function)
     total = fp + arr_length + spill_count + ra + saved_count
 
     return total % 2 == 1
