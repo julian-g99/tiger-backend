@@ -5,6 +5,7 @@ from second_pass import parse_function
 import argparse
 import pprint
 from mc_function import MCFunction
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--allocator', type=str, default='greedy', help='the type of register allocation to perform (\'naive\' or \'greedy\')')
@@ -34,7 +35,8 @@ def main():
         allocator = NaiveMIPSAllocator([])
 
     for function in mc_functions:
-        allocator.mapMCFunction(function, target='x', physical='$t')
+        pattern = re.compile('x')
+        allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
         # print("regMaps: {}".format(function.reg_maps))
         # print("bbs: {}".format(function.bbs))
 
@@ -42,8 +44,6 @@ def main():
     for function in mc_functions:
         # print(function.reg_maps)
         res = parse_function(function)
-
-    # # Demo code for just getting the register maps
 
 
 
