@@ -115,12 +115,14 @@ class GreedyMIPSAllocator(MIPSAllocator):
         cfg = CFG(function.body)
         regMaps = {}
         self.program = function.body
+        bbDict = {}
         for bb in cfg.bbs:
+            bbDict[bb.pp] = bb
             regMap = self._getBlockRegMap(bb, target=target, physical=physical)
             regMap = self._reformatRegMapSpillField(regMap)
             regMaps[bb.pp] = regMap
         function.set_reg_maps(regMaps)
-        function.set_bbs(cfg.bbs)
+        function.set_bbs(bbDict)
     
     def _getBlockRegMap(self, block, target='$t', physical='$t'):
         if type(target) != str:
@@ -344,7 +346,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
         regMap['spill'] = self.vregs
         regMap = self._reformatRegMapSpillField(regMap)
         function.set_reg_maps({0: regMap})
-        function.set_bbs([BB(0, instructions=function.body)])
+        function.set_bbs({0: BB(0, instructions=function.body)})
 
     def allocProgram(self, target='$t', physical='$t'):
         if type(target) != str:
