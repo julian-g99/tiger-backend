@@ -47,61 +47,61 @@ def convert_arithmetic(instr: IRInstruction) -> str:
     if instr.instruction_type == "add" or instr.instruction_type == "sub":
         if not is_constant(src0) and not is_constant(src1):
             # neither is constant
-            output.append(MCInstruction(instr.instruction_type, regs=[s_map[dest], s_map[src0], s_map[src1]]))
+            output.append(MCInstruction(instr.instruction_type, regs=[dest, src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
             # src1 is constant
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[s_map[dest], s_map[src0]], imm=src1))
+            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src0], imm=src1))
         elif is_constant(src0) and not is_constant(src1):
             # src0 is constant
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[s_map[dest], s_map[src1]], imm=src0))
+            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src1], imm=src0))
         else:
             # both are constant
-            output.append(MCInstruction("move", regs=['zero']))
-            output.append(MCInstruction("addi", regs=[s_map[src0]]))
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[s_map[dest], s_map[src1]]))
+            output.append(MCInstruction("move", regs=['$0']))
+            output.append(MCInstruction("addi", regs=[src0]))
+            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src1]))
     if instr.instruction_type == "mult":
         # FIXME: currently assumes the result will be 32 bit
         if not is_constant(src0) and not is_constant(src1):
             # neither is constant
             # output = "mult %s, %s\n" % (s_map[src0], s_map[src1])
-            output.append(MCInstruction("mult", regs=[s_map[src0], s_map[src1]]))
+            output.append(MCInstruction("mult", regs=[src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src1))
-            output.append(MCInstruction("mult", regs=[s_map[src0], s_map[dest]]))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src1))
+            output.append(MCInstruction("mult", regs=[src0, dest]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
-            output.append(MCInstruction("mult", regs=[s_map[src1], s_map[dest]]))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src0))
+            output.append(MCInstruction("mult", regs=[src1, dest]))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src0))
             output.append(MCInstruction("addi", regs=[s_map["multiply_temporary_register"], "zero"], imm=src1))
-            output.append(MCInstruction("mult", regs=[s_map[dest], s_map["multiply_temporary_register"]]))
-        output.append(MCInstruction("mflo", regs=[s_map[dest]]))
+            output.append(MCInstruction("mult", regs=[dest, s_map["multiply_temporary_register"]]))
+        output.append(MCInstruction("mflo", regs=[dest]))
     if instr.instruction_type == "div":
         # FIXME: currently only keeps the integer quotient
         if not is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("div", regs=[s_map[src0], s_map[src1]]))
+            output.append(MCInstruction("div", regs=[src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src1))
-            output.append(MCInstruction("div", regs=[s_map[src1], s_map[dest]]))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src1))
+            output.append(MCInstruction("div", regs=[src1, dest]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
-            output.append(MCInstruction("div", regs=[s_map[src1], s_map[dest]]))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src0))
+            output.append(MCInstruction("div", regs=[src1, dest]))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src0))
             output.append(MCInstruction("addi", regs=[s_map["division_temporary_register"], "zero"], imm=src1))
-            output.append(MCInstruction("div", regs=[s_map[dest], s_map["division_temporary_register"]]))
-        output.append(MCInstruction("mflo", regs=[s_map[dest]]))
+            output.append(MCInstruction("div", regs=[dest, s_map["division_temporary_register"]]))
+        output.append(MCInstruction("mflo", regs=[dest]))
     if instr.instruction_type in ["and", "or"]:
         i_type = instr.instruction_type
         if not is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction(i_type, regs=[s_map[dest], s_map[src0], s_map[src1]]))
+            output.append(MCInstruction(i_type, regs=[dest, src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction(i_type+"i", regs=[s_map[dest], s_map[src0]], imm=src1))
+            output.append(MCInstruction(i_type+"i", regs=[dest, src0], imm=src1))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction(i_type+"i", regs=[s_map[dest], s_map[src1]], imm=src0))
+            output.append(MCInstruction(i_type+"i", regs=[dest, src1], imm=src0))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
-            output.append(MCInstruction(i_type+"i", regs=[s_map[dest], s_map[dest]], imm=src1))
+            output.append(MCInstruction("addi", regs=[dest, "zero"], imm=src0))
+            output.append(MCInstruction(i_type+"i", regs=[dest, dest], imm=src1))
 
     return output
 
@@ -111,9 +111,9 @@ def convert_assignment(instr: IRInstruction) -> str:
     assert(not is_constant(dest))
     
     if not is_constant(src):
-        output = [MCInstruction("move", regs=[s_map[dest], s_map[src]])]
+        output = [MCInstruction("move", regs=[dest, src])]
     else:
-        output = [MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src)]
+        output = [MCInstruction("addi", regs=[dest, "zero"], imm=src)]
 
     return output
 
@@ -128,14 +128,14 @@ def convert_branch(instr: IRInstruction) -> str:
         label, src0, src1 = instr.argument_list
         op = branch_map[instr.instruction_type]
 
-        return [MCInstruction(op, regs=[s_map[src0], s_map[src1]], target=label)]
+        return [MCInstruction(op, regs=[src0, src1], target=label)]
 
 def convert_array_load_store(instr):
     # TODO: implement
     assert(instr.instruction_type in ["array_store", "array_load"])
     assert(len(instr.argument_list) == 3)
     val, array, index = instr.argument_list
-    array = s_map[array]
+    array = array
     output = []
 
     if instr.instruction_type == "array_load":
@@ -145,7 +145,7 @@ def convert_array_load_store(instr):
 
 
     if is_constant(index) and not is_constant(val):
-        output.append(MCInstruction(op, regs=[s_map[val], s_map[array]], offset=index))
+        output.append(MCInstruction(op, regs=[val, array], offset=index))
     elif is_constant(index) and is_constant(val):
         output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg"], "zero"], imm=val))
         output.append(MCInstruction(op, regs=[s_map["array_store_temp_reg"], array], offset=index))
@@ -155,14 +155,14 @@ def convert_array_load_store(instr):
         output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg0", "zero"]], imm=val))
 
         # address calculation
-        output.append(MCInstruction("add", regs=[array, array, s_map[index]]))
+        output.append(MCInstruction("add", regs=[array, array, index]))
         output.append(MCInstruction(op, regs=[s_map["array_store_temp_reg"], array]))
         del s_map["array_store_temp_reg"]
-        output.append(MCInstruction("sub", regs=[array, array, s_map[index]]))
+        output.append(MCInstruction("sub", regs=[array, array, index]))
     else:
-        output.append(MCInstruction("add", regs=[array, array, s_map[index]]))
-        output.append(MCInstruction(op, regs=[s_map[val], array]))
-        output.append(MCInstruction("sub", regs=[array, array, s_map[index]]))
+        output.append(MCInstruction("add", regs=[array, array, index]))
+        output.append(MCInstruction(op, regs=[val, array]))
+        output.append(MCInstruction("sub", regs=[array, array, index]))
     return output
 
 

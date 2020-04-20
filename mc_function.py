@@ -81,6 +81,7 @@ class MCFunction:
 
     @staticmethod
     def get_int_vals(reg_maps):
+        print(reg_maps)
         int_vals = set()
         for _, reg_map in reg_maps.items():
             for virt, phys in reg_map.items():
