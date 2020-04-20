@@ -3,8 +3,7 @@ from mc_instruction import MCInstruction
 import re
 
 class MCFunction:
-    def __init__(self, int_vals: List[str], int_arrs: List[str], instrs: List[MCInstruction]):
-        self.int_vals = int_vals
+    def __init__(self, int_arrs: List[str], instrs: List[MCInstruction]):
         self.int_arrs = int_arrs
 
         self.body = instrs
@@ -19,7 +18,6 @@ class MCFunction:
         for bbid, reg_map in self.reg_maps.items():
             for virtual, physical in reg_map.items():
                 virtuals.add(virtual)
-        assert(len(virtuals) == len(self.int_vals) + len(self.int_arrs))
         return len(virtuals)
 
 
@@ -34,6 +32,7 @@ class MCFunction:
         self.saved_regs = MCFunction.get_saved_regs(self.reg_maps)
         self.spill_regs = MCFunction.get_spill_regs(self.reg_maps)
         self.num_vars = self.num_vars()
+        self.int_vals = MCFunction.get_int_vals(reg_maps)
         if self.bbs is not None:
             self.has_data = self.has_data()
 
@@ -73,9 +72,17 @@ class MCFunction:
 
     @staticmethod
     def calls_others(bbs):
-        for bb in bbs:
+        for bbid, bb in bbs.items():
             for instr in bb:
-                if instr.op == "ja":
+                if instr.op == "jal":
                     return True
 
         return False
+
+    @staticmethod
+    def get_int_vals(reg_maps):
+        int_vals = set()
+        for _, reg_map in reg_maps.items():
+            for virt, phys in reg_map.items():
+                int_vals.add(virt)
+        return list(int_vals)

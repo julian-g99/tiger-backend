@@ -352,7 +352,7 @@ def convert_calls(instr: IRInstruction):
     assert(instr.instruction_type == "call" or instr.instruction_type == "callr")
     intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
     sp = "$sp"
-    print("argument_list: ", instr.argument_list)
+    # print("argument_list: ", instr.argument_list)
     if instr.instruction_type == "call":
         function_name = instr.argument_list[0]
         arguments = instr.argument_list[1:]

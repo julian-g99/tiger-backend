@@ -60,6 +60,8 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
 
     # make space for arrays
     curr_offset = -4
+    print("int arrs: ", function.int_arrs)
+    print()
     for arr in function.int_arrs:
         prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-arr[1]*4)) # arr[1] should the size
         offsets[arr[0]] = curr_offset
@@ -67,6 +69,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
 
     # make space for local variables
     # for greedy local alloc, need to save everything (even non-spilled)
+    print("int vals: ", function.int_vals)
     for val in function.int_vals:
         prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
         offsets[val] = curr_offset
@@ -266,7 +269,7 @@ def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tu
     save = []
     fp = "$fp"
 
-    for virt, phys in reg_map:
+    for virt, phys in reg_map.items():
         offset = offsets[virt]
         load.append(MCInstruction("lw", regs=[phys, fp], offset=offset))
         save.append(MCInstruction("sw", regs=[phys, fp], offset=offset))
@@ -282,7 +285,7 @@ def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInst
     Returns:
         - the translated output (does not include the prologue and epilogue)
     """
-    print(function.bbs)
+    # print(function.bbs)
     assert(function.bbs.keys() == function.reg_maps.keys())
 
     output = []
@@ -305,12 +308,10 @@ def parse_function(function: MCFunction) -> List[MCInstruction]:
     Return:
         - a list of mc instructions
     """
-    # print(reg_map)
     assert(len(function.reg_maps) == len(function.bbs))
 
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
-    print("offsets: ", offsets)
     #NOTE: if the return value above is None that means it's a simple leaf
     translated_body = translate_body(function, offsets)
 
