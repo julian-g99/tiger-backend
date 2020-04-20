@@ -5,6 +5,8 @@ from typing import Dict, List, Tuple
 import re
 import copy
 
+import pprint
+
 from mc_instruction import MCInstruction
 
 def needs_pad(function: MCFunction) -> bool:
@@ -25,9 +27,28 @@ def needs_pad(function: MCFunction) -> bool:
     # arg_count = arg_space(function)
     num_vars = function.num_vars
     # total = fp + arr_length + spill_count + ra + saved_count
-    total = fp + ra + arr_length + num_vars
+    if function.name != "main":
+        total = fp + ra + arr_length + num_vars + 8 + len(function.saved_regs)
+    else:
+        total = fp + arr_length + num_vars
 
     return total % 2 == 1
+
+def alloc_array(name: str, size: int) -> List[MCInstruction]:
+    syscode = 9
+    output = []
+    sp = "$sp"
+
+    # syscall
+    output.append(MCInstruction("li", regs=["$v0"], imm=syscode))
+    output.append(MCInstruction("li", regs=["$a0"], imm=size*4))
+    output.append(MCInstruction("syscall"))
+
+    # store pointer on the stack
+    output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+    output.append(MCInstruction("sw", regs=["$v0", sp], imm=0))
+
+    return output
 
 def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCInstruction], Dict[str, int]):
     """
@@ -45,12 +66,16 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     """
     if not function.has_data:
         return None
+
     # prologue of the calling convention
     prologue = []
     offsets = {}
     sp = "$sp"
     fp = "$fp"
 
+    # remove later
+    if function.name == "main":
+        prologue.append(MCInstruction("li", regs=["$t0"], imm=0))
     # prologue
 
     # make space for fp and save
@@ -60,39 +85,43 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
 
     # make space for arrays
     curr_offset = -4
-    print("int arrs: ", function.int_arrs)
-    print()
+    arr_names = []
     for arr in function.int_arrs:
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-arr[1]*4)) # arr[1] should the size
+        arr_names.append(arr[0])
+        prologue += alloc_array(arr[0], arr[1])
         offsets[arr[0]] = curr_offset
-        curr_offset -= arr[1] * 4
+        curr_offset -= 4
 
     # make space for local variables
     # for greedy local alloc, need to save everything (even non-spilled)
-    print("int vals: ", function.int_vals)
     for val in function.int_vals:
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-        offsets[val] = curr_offset
-        curr_offset -= 4
+        if val not in arr_names:
+            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            offsets[val] = curr_offset
+            curr_offset -= 4
 
     # save all the t registers (as specified in the pdf)
     for i in range(8):
         t_reg = "$t%d" % i
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-        prologue.append(MCInstruction("sw", regs=[t_reg, sp], imm=0))
-        offsets[t_reg] = curr_offset
-        curr_offset -= 4
+        if function.name != "main":
+            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            prologue.append(MCInstruction("sw", regs=[t_reg, sp], imm=0))
+            offsets[t_reg] = curr_offset
+            curr_offset -= 4
+        else:
+            prologue.append(MCInstruction("li", regs=[t_reg], imm=0))
 
     # padding
     if needs_pad(function):
         prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
         curr_offset -= 4
 
-    # return address
-    prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-    prologue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
-    offsets["$ra"] = curr_offset
-    curr_offset -= 4
+    if function.name != "main":
+        # return address
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        prologue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
+        offsets["$ra"] = curr_offset
+        curr_offset -= 4
 
     # s registers
     for s in function.saved_regs:
@@ -107,30 +136,18 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
 
     # restore the s registers
     # for s in function.saved_regs[::-1]:
-    for s in function.saved_regs:
-        epilogue.append(MCInstruction("lw", regs=[s, fp], offset=offsets[s]))
+    if function.name != "main":
+        for s in function.saved_regs:
+            epilogue.append(MCInstruction("lw", regs=[s, fp], offset=offsets[s]))
 
-    # restore the return address
-    epilogue.append(MCInstruction("lw", regs=["$ra", sp], offset=offsets["$ra"]))
-    # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
-
-    # restore t registers
-    for i in range(8):
-        t_reg = "$t%d" % i
-        epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
-
-    # skip over padding if it's there
-    # if needs_pad(function):
+        # restore the return address
+        epilogue.append(MCInstruction("lw", regs=["$ra", sp], offset=offsets["$ra"]))
         # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
-    # tear down the local variables
-    # if len(function.spill_regs) != 0:
-        # spill_count = len(function.spill_regs)
-        # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4*spill_count))
-
-    # tear down the array
-    # for arr in function.int_arrs:
-        # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=arr[1]*4))
+        # restore t registers
+        for i in range(8):
+            t_reg = "$t%d" % i
+            epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
 
     # restore the fp
     epilogue.append(MCInstruction("move", regs=[sp, fp])) # moving sp back to fp
@@ -163,15 +180,18 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
     curr_temp = 0
     # for phys, ir in zip(phys_reg, ir_regs):
     for virtual in instr.regs:
-        physical = reg_map[virtual]
-        if physical == "spill":
-            temp_reg = "$t%d" % curr_temp
-            save.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
-            restore.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
-            new_args.append(temp_reg)
-            curr_temp += 1
+        if virtual[0] == "$":
+            new_args.append(virtual)
         else:
-            new_args.append(physical)
+            physical = reg_map[virtual]
+            if physical == "spill":
+                temp_reg = "$t%d" % curr_temp
+                save.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+                restore.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+                new_args.append(temp_reg)
+                curr_temp += 1
+            else:
+                new_args.append(physical)
 
     return save, restore, new_args
 
@@ -210,56 +230,14 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
     output = []
     # physical_regs = [reg_map[virtual_reg] for virtual_reg in instr.regs]
     curr_temp = 0
-    for i in range(len(instr.regs)):
-        save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
-        output += save
-        instr.regs = new_regs
-        output.append(instr)
-        output += restore
-
-    # count the number of arguments
-
-    # NOTE: this if is at this level because the args and dests still need to be translated to physical registers first
-    # FIXME: implement the rest of this. Right now only intrinsics is done
-    if instr.op == "callr" and instr.op == "call":
-        intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
-        if instr.name in intrinsics:
-            convert_intrinsic(instr)
-        output = []
-        # ------------ intergrate this ------------------ #
-        num_args = len(instr.arguments)
-        if num_args <= 4:
-            curr_reg = 0
-            for arg in instr.arguments:
-                arg_reg = "$a%d" % curr_reg
-                curr_reg += 1
-                # TODO: cases to consider:
-                    # 1. arg is immediate value
-                    # 2. arg is in a physical register
-                    # 3. arg is on the stack as a local variable (i.e., it's spilled)
-                    # 4. arg is on the stack as an array value
-                # FIXME: using the cases above, move the value of arg into arg_reg
-        else:
-            curr_reg = 0
-            for i in range(4):
-                # TODO: do the same as above
-                arg_reg = "%a%d" % curr_reg
-                curr_reg += 1
-
-            # TODO: store the rest on the stack
-
-        spill_count = list(reg_map.values()).count("spill")
-        # ------------ intergrate this ------------------ #
-
-        if spill_count != 0:
-            spill_load, spill_map = spill(spill_count, reg_map, instr.regs, offsets, load=True)
-            output += spill_load
-            # for i in range(len(copy.regs)):
-                # if copy.regs[i] == "spill":
-                    # copy.regs[i] = spill_map[orig_regs[i]]
-            new_regs = [spill_map[r] for r in instr.regs]
-
-            spill_store, _ = spill(spill_count, reg_map, instr.regs, offsets, load=False)
+    if instr.regs is None:
+        return [instr]
+    save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
+    output += save
+    instr.regs = new_regs
+    # print(instr)
+    output.append(instr)
+    output += restore
 
     return output
 
@@ -270,9 +248,10 @@ def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tu
     fp = "$fp"
 
     for virt, phys in reg_map.items():
-        offset = offsets[virt]
-        load.append(MCInstruction("lw", regs=[phys, fp], offset=offset))
-        save.append(MCInstruction("sw", regs=[phys, fp], offset=offset))
+        if phys != "spill":
+            offset = offsets[virt]
+            load.append(MCInstruction("lw", regs=[phys, fp], offset=offset))
+            save.append(MCInstruction("sw", regs=[phys, fp], offset=offset))
 
     return load, save
 
@@ -285,7 +264,6 @@ def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInst
     Returns:
         - the translated output (does not include the prologue and epilogue)
     """
-    # print(function.bbs)
     assert(function.bbs.keys() == function.reg_maps.keys())
 
     output = []
@@ -312,20 +290,11 @@ def parse_function(function: MCFunction) -> List[MCInstruction]:
 
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
+    sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
     #NOTE: if the return value above is None that means it's a simple leaf
     translated_body = translate_body(function, offsets)
 
     res = prologue + translated_body + epilogue
-
-    for i in prologue:
-        print(i)
-    print()
-    for i in translated_body:
-        print(i)
-    print()
-    for i in epilogue:
-        print(i)
-
     return res
 
 def test():

@@ -1,43 +1,116 @@
-{0: {'x0': 'spill', 'x1': 'spill', 'x2': 'spill', 'x3': 'spill', 'x4': 'spill', 'x5': 'spill', 'x6': 'spill', 'x7': 'spill', 'x8': 'spill', 'x9': 'spill', 'x10': 'spill', 'x11': 'spill', 'x12': 'spill', 'x13': 'spill'}}
-addiu $sp, $sp, -4
-sw $fp, ($sp)
-move $fp, $sp
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-addiu $sp, $sp, -4
-sw $ra, ($sp)
-
-addi x0, zero, 0
-addi x1, zero, 0
-addi x2, zero, 0
-addi x3, zero, 0
-addi x4, zero, 0
-addi x5, zero, 0
-addi x6, zero, 0
-addi x7, zero, 0
-addi x8, zero, 0
-addi x9, zero, 0
-addi x10, zero, 0
-addi x11, zero, 0
-addi x12, zero, 0
-addi x13, zero, 0
-mult x1, x2
-mflo x0
-
-sw $ra, ($sp)
-addiu $sp, $sp, 4
-addiu $sp, $sp, 56
-lw $fp, ($sp)
-addiu $sp, $sp, 4
+.text
+main:
+	li $t0, 0
+	addiu $sp, $sp, -4
+	sw $fp, ($sp)
+	move $fp, $sp
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	li $t0, 0
+	li $t1, 0
+	li $t2, 0
+	li $t3, 0
+	li $t4, 0
+	li $t5, 0
+	li $t6, 0
+	li $t7, 0
+	addiu $sp, $sp, -4
+	li $v0, 5
+	syscall
+	sw $t0, -8($fp)
+	move $t0, $v0
+	lw $t0, -8($fp)
+	sw $t0, -8($fp)
+	move $a0, $t0
+	lw $t0, -8($fp)
+	jal fib
+	sw $t0, -4($fp)
+	move $t0, $v0
+	lw $t0, -4($fp)
+	move $virtual7, $virtual12
+	sw $t0, -8($fp)
+	move $a0, $t0
+	lw $t0, -8($fp)
+	li $v0, 1
+	syscall
+	li $a0, 10
+	li $v0, 11
+	syscall
+	move $sp, $fp
+	lw $fp, ($sp)
+	addiu $sp, $sp, 4
+fib:
+    li $t0, 0
+	addiu $sp, $sp, -4
+	sw $fp, ($sp)
+	move $fp, $sp
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	sw $t0, ($sp)
+	addiu $sp, $sp, -4
+	sw $t1, ($sp)
+	addiu $sp, $sp, -4
+	sw $t2, ($sp)
+	addiu $sp, $sp, -4
+	sw $t3, ($sp)
+	addiu $sp, $sp, -4
+	sw $t4, ($sp)
+	addiu $sp, $sp, -4
+	sw $t5, ($sp)
+	addiu $sp, $sp, -4
+	sw $t6, ($sp)
+	addiu $sp, $sp, -4
+	sw $t7, ($sp)
+	addiu $sp, $sp, -4
+	addiu $sp, $sp, -4
+	sw $ra, ($sp)
+	li $virtual0, 0
+	li $virtual1, 1
+	move $virtual2, $virtual1
+	bgt $virtual3, $virtual4, if_label0
+	li $virtual5, 0
+	move $virtual1, $virtual3
+	move $virtual2, $virtual1
+	j end
+	if_label0:
+	subi $virtual3, $virtual3, 1
+	sw $t0, -20($fp)
+	move $a0, $t0
+	lw $t0, -20($fp)
+	jal fib
+	sw $t0, -12($fp)
+	move $t0, $v0
+	lw $t0, -12($fp)
+	subi $virtual7, $virtual3, 1
+	subi $virtual3, $virtual3, 1
+	sw $t0, -4($fp)
+	move $a0, $t0
+	lw $t0, -4($fp)
+	jal fib
+	sw $t0, -8($fp)
+	move $t0, $v0
+	lw $t0, -8($fp)
+	move $virtual5, $virtual0
+	move $virtual1, $virtual0
+	add $virtual1, $virtual9, $virtual10
+	move $virtual2, $virtual1
+	end:
+	sw $t0, -16($fp)
+	move $v0, $t0
+	lw $t0, -16($fp)
+	lw $ra, -60($sp)
+	lw $t0, -24($fp)
+	lw $t1, -28($fp)
+	lw $t2, -32($fp)
+	lw $t3, -36($fp)
+	lw $t4, -40($fp)
+	lw $t5, -44($fp)
+	lw $t6, -48($fp)
+	lw $t7, -52($fp)
+	move $sp, $fp
+	lw $fp, ($sp)
+	addiu $sp, $sp, 4

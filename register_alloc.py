@@ -55,7 +55,7 @@ class MIPSAllocator:
                     if regex:
                         if (type(target) != re.Pattern):
                             raise TypeError("target must be a compiled pattern. Use re.compile()")
-                        if re.fullmatch(target, r) != None:
+                        if re.match(target, r) != None:
                             regs.append(r)
                     else:
                         if (r[:len(target)] == target) & (r not in regs):

@@ -18,6 +18,7 @@ def find_functions(instructions: List[IRInstruction]) -> List[List[IRInstruction
 
     inside_function = False
     curr_function = []
+    curr_name = None
     for instr in instructions:
         if instr.instruction_type == "function_start":
             inside_function = True
@@ -56,7 +57,7 @@ def convert_arithmetic(instr: IRInstruction) -> str:
             output.append(MCInstruction(instr.instruction_type+'i', regs=[s_map[dest], s_map[src1]], imm=src0))
         else:
             # both are constant
-            output.append(MCInstruction("move", regs=['zero']))
+            output.append(MCInstruction("move", regs=['$0']))
             output.append(MCInstruction("addi", regs=[s_map[src0]]))
             output.append(MCInstruction(instr.instruction_type+'i', regs=[s_map[dest], s_map[src1]]))
     if instr.instruction_type == "mult":
@@ -66,14 +67,14 @@ def convert_arithmetic(instr: IRInstruction) -> str:
             # output = "mult %s, %s\n" % (s_map[src0], s_map[src1])
             output.append(MCInstruction("mult", regs=[s_map[src0], s_map[src1]]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src1))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src1))
             output.append(MCInstruction("mult", regs=[s_map[src0], s_map[dest]]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src0))
             output.append(MCInstruction("mult", regs=[s_map[src1], s_map[dest]]))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
-            output.append(MCInstruction("addi", regs=[s_map["multiply_temporary_register"], "zero"], imm=src1))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src0))
+            output.append(MCInstruction("addi", regs=[s_map["multiply_temporary_register"], "$0"], imm=src1))
             output.append(MCInstruction("mult", regs=[s_map[dest], s_map["multiply_temporary_register"]]))
         output.append(MCInstruction("mflo", regs=[s_map[dest]]))
     if instr.instruction_type == "div":
@@ -81,14 +82,14 @@ def convert_arithmetic(instr: IRInstruction) -> str:
         if not is_constant(src0) and not is_constant(src1):
             output.append(MCInstruction("div", regs=[s_map[src0], s_map[src1]]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src1))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src1))
             output.append(MCInstruction("div", regs=[s_map[src1], s_map[dest]]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src0))
             output.append(MCInstruction("div", regs=[s_map[src1], s_map[dest]]))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
-            output.append(MCInstruction("addi", regs=[s_map["division_temporary_register"], "zero"], imm=src1))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src0))
+            output.append(MCInstruction("addi", regs=[s_map["division_temporary_register"], "$0"], imm=src1))
             output.append(MCInstruction("div", regs=[s_map[dest], s_map["division_temporary_register"]]))
         output.append(MCInstruction("mflo", regs=[s_map[dest]]))
     if instr.instruction_type in ["and", "or"]:
@@ -100,7 +101,7 @@ def convert_arithmetic(instr: IRInstruction) -> str:
         elif is_constant(src0) and not is_constant(src1):
             output.append(MCInstruction(i_type+"i", regs=[s_map[dest], s_map[src1]], imm=src0))
         else:
-            output.append(MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src0))
+            output.append(MCInstruction("addi", regs=[s_map[dest], "$0"], imm=src0))
             output.append(MCInstruction(i_type+"i", regs=[s_map[dest], s_map[dest]], imm=src1))
 
     return output
@@ -113,7 +114,7 @@ def convert_assignment(instr: IRInstruction) -> str:
     if not is_constant(src):
         output = [MCInstruction("move", regs=[s_map[dest], s_map[src]])]
     else:
-        output = [MCInstruction("addi", regs=[s_map[dest], "zero"], imm=src)]
+        output = [MCInstruction("li", regs=[s_map[dest]], imm=src)]
 
     return output
 
@@ -147,12 +148,12 @@ def convert_array_load_store(instr):
     if is_constant(index) and not is_constant(val):
         output.append(MCInstruction(op, regs=[s_map[val], s_map[array]], offset=index))
     elif is_constant(index) and is_constant(val):
-        output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg"], "zero"], imm=val))
+        output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg"], "$0"], imm=val))
         output.append(MCInstruction(op, regs=[s_map["array_store_temp_reg"], array], offset=index))
         del s_map["array_store_temp_reg"]
     elif not is_constant(index) and is_constant(val):
         # getting the immediate value into a register
-        output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg0", "zero"]], imm=val))
+        output.append(MCInstruction("addi", regs=[s_map["array_store_temp_reg0", "$0"]], imm=val))
 
         # address calculation
         output.append(MCInstruction("add", regs=[array, array, s_map[index]]))
@@ -352,90 +353,70 @@ def convert_calls(instr: IRInstruction):
     assert(instr.instruction_type == "call" or instr.instruction_type == "callr")
     intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
     sp = "$sp"
-    # print("argument_list: ", instr.argument_list)
     if instr.instruction_type == "call":
         function_name = instr.argument_list[0]
         arguments = instr.argument_list[1:]
-        if function_name in intrinsics:
-            return convert_intrinsic(instr, function_name, arguments)
-
-        output = []
-        # normal function call
-        first_section = arguments[:4]
-        for i, arg in enumerate(first_section):
-            arg_reg = "$a%d" % i
-            if is_constant(arg):
-                output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
-            else:
-                output.append(MCInstruction("move", regs=[arg_reg, arg]))
-
-        second_section = arguments[4:][:-1] # pushing in reverse order
-        temp = s_map["CONVERT_CALLS_TEMP_REG"]
-        stack_length = 0
-        for arg in second_section:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            stack_length += 1
-            if is_constant(arg):
-                output.append(MCInstruction("li", regs=[temp], imm=arg))
-                output.append(MCInstruction("sw", regs=[temp, sp], imm=0))
-            else:
-                output.append(MCInstruction("sw", regs=[arg, sp], imm=0))
-        del s_map["CONVERT_CALLS_TEMP_REG"]
-        # paddding
-        if len(second_section) % 2 == 1:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            stack_length += 1
-
-        # the actual call itself
-        output.append("jal", target=function_name)
-
-        # popping the stack
-        if stack_length != 0:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
-
+        return_dest = None
     else:
         return_dest = instr.argument_list[0]
         function_name = instr.argument_list[1]
         arguments = instr.argument_list[2:]
-        if function_name in intrinsics:
-            return convert_intrinsic(instr, function_name, arguments, return_dest)
 
-        output = []
-        # normal function call
-        first_section = arguments[:4]
-        for i, arg in enumerate(first_section):
-            arg_reg = "$a%d" % i
-            if is_constant(arg):
-                output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
-            else:
-                output.append(MCInstruction("move", regs=[arg_reg, arg]))
+    if function_name in intrinsics:
+        return convert_intrinsic(instr, function_name, arguments, return_dest)
 
-        second_section = arguments[4:][:-1] # pushing in reverse order
-        temp = s_map["CONVERT_CALLS_TEMP_REG"]
-        stack_length = 0
-        for arg in second_section:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            stack_length += 1
-            if is_constant(arg):
-                output.append(MCInstruction("li", regs=[temp], imm=arg))
-                output.append(MCInstruction("sw", regs=[temp, sp], imm=0))
-            else:
-                output.append(MCInstruction("sw", regs=[arg, sp], imm=0))
-        del s_map["CONVERT_CALLS_TEMP_REG"]
-        # paddding
-        if len(second_section) % 2 == 1:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            stack_length += 1
+    output = []
+    # normal function call
+    first_section = arguments[:4]
+    for i, arg in enumerate(first_section):
+        arg_reg = "$a%d" % i
+        if is_constant(arg):
+            output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
+        else:
+            output.append(MCInstruction("move", regs=[arg_reg, arg]))
 
-        # the actual call itself
-        output.append("jal", target=function_name)
+    second_section = arguments[4:][:-1] # pushing in reverse order
+    temp = s_map["CONVERT_CALLS_TEMP_REG"]
+    stack_length = 0
+    for arg in second_section:
+        output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        stack_length += 1
+        if is_constant(arg):
+            output.append(MCInstruction("li", regs=[temp], imm=arg))
+            output.append(MCInstruction("sw", regs=[temp, sp], imm=0))
+        else:
+            output.append(MCInstruction("sw", regs=[arg, sp], imm=0))
+    del s_map["CONVERT_CALLS_TEMP_REG"]
+    # paddding
+    if len(second_section) % 2 == 1:
+        output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        stack_length += 1
 
+    # the actual call itself
+    output.append(MCInstruction("jal", target=function_name))
+
+    if instr.instruction_type == "callr":
         # reading the return value
-        output.append("move", regs=[return_dest, "$v0"]) # shouldn't have anything that doesn't fit in one word
+        output.append(MCInstruction("move", regs=[return_dest, "$v0"])) # shouldn't have anything that doesn't fit in one word
 
-        # popping the stack
-        if stack_length != 0:
-            output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
+    # popping the stack
+    if stack_length != 0:
+        output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
+
+    return output
+
+def convert_return(instr):
+    assert(instr.instruction_type == "return")
+    assert(len(instr.argument_list) == 1)
+    ret_val = instr.argument_list[0]
+    output = []
+    v0 = "$v0"
+    if is_constant(ret_val):
+        output.append(MCInstruction("li", regs=[v0], imm=ret_val))
+    else:
+        output.append(MCInstruction("move", regs=[v0, ret_val]))
+
+    return output
 
 def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     """
@@ -458,6 +439,8 @@ def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
         return convert_label(instr)
     elif instr.instruction_type in ["call", "callr"]:
         return convert_calls(instr)
+    elif instr.instruction_type == "return":
+        return convert_return(instr)
 
 # def main():
     # instructions = parse_instructions("./test_cases/bfs/bfs/ir")

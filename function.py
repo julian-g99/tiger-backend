@@ -6,6 +6,7 @@ class Function:
     def __init__(self, instructions: List[IRInstruction]):
         self.instructions = instructions
         self.__check_types()
+        self.name = self.__get_name()
         self.return_type, self.name = self.__get_rtype_and_name()
         self.is_main = self.name == "main"
         self.args = self.__get_args()
@@ -23,7 +24,6 @@ class Function:
         else:
             self.stack_type = "nonleaf"
 
-
     def __check_types(self):
         instructions = self.instructions
         assert(instructions[0].instruction_type == "function_start")
@@ -31,6 +31,12 @@ class Function:
         assert(instructions[2].instruction_type == "function_int_decl")
         assert(instructions[3].instruction_type == "function_float_decl")
         assert(instructions[-1].instruction_type == "function_end")
+
+    def __get_name(self):
+        s = self.instructions[1].argument_list[0]
+        name = s.split()[1]
+        name = name[:name.index("(")]
+        return name
 
     def __get_args(self):
         s = self.instructions[1].argument_list[0]

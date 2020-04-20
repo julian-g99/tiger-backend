@@ -3,9 +3,9 @@ from mc_instruction import MCInstruction
 import re
 
 class MCFunction:
-    def __init__(self, int_arrs: List[str], instrs: List[MCInstruction]):
+    def __init__(self, name: str, int_arrs: List[str], instrs: List[MCInstruction]):
         self.int_arrs = int_arrs
-
+        self.name = name
         self.body = instrs
         self.bbs = None
         self.reg_maps = None

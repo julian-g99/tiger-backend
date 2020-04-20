@@ -25,9 +25,7 @@ def main():
         for i in func.body():
             mc_instr = instr_to_asm(i)
             translated += mc_instr
-        for i in translated:
-            print(i)
-        mc_functions.append(MCFunction(int_arrs=func.int_arrs, instrs=translated))
+        mc_functions.append(MCFunction(name=func.name, int_arrs=func.int_arrs, instrs=translated))
 
     if args.allocator == 'greedy':
         allocator = GreedyMIPSAllocator([])
@@ -35,16 +33,15 @@ def main():
         allocator = NaiveMIPSAllocator([])
 
     for function in mc_functions:
-        pattern = re.compile('x')
+        pattern = re.compile(r"(?!\$)")
         allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
-        # print("regMaps: {}".format(function.reg_maps))
-        # print("bbs: {}".format(function.bbs))
 
     # Continue selecting from here
     for function in mc_functions:
-        # print(function.reg_maps)
+        print(function.name + ":")
         res = parse_function(function)
-
+        for i in res:
+            print("\t%s" % i)
 
 
 if __name__ == "__main__":
