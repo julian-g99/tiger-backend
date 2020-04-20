@@ -118,42 +118,45 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
-    def mapMCFunction(self, function, target='$t', physical='$t', regex=False):
+    def mapMCFunction(self, function, target='$t', physical='$t', regex=False, auto_spill_arrs=True):
         cfg = CFG(function.body)
         regMaps = {}
         self.program = function.body
         bbDict = {}
         for bb in cfg.bbs:
             bbDict[bb.pp] = bb
-            regMap = self._getBlockRegMap(bb, target=target, physical=physical, regex=regex)
+            if (auto_spill_arrs):
+                regMap = self._getBlockRegMap(bb, target=target, physical=physical, regex=regex, auto_spill=function.int_arrs)
+            else:
+                regMap = self._getBlockRegMap(bb, target=target, physical=physical, regex=regex, auto_spill=None)
             regMap = self._reformatRegMapSpillField(regMap)
             regMaps[bb.pp] = regMap
         function.set_reg_maps(regMaps)
         function.set_bbs(bbDict)
     
-    def _getBlockRegMap(self, block, target='$t', physical='$t', regex=False):
+    def _getBlockRegMap(self, block, target='$t', physical='$t', regex=False, auto_spill=None):
         self.newBlock.pp = block.pp
         self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
-        self.regMap = self._getRegMap(liveranges)
+        self.regMap = self._getRegMap(liveranges, auto_spill)
         return self.regMap
 
-    def allocProgram(self, target='$t', physical='$t', regex=False):
+    def allocProgram(self, target='$t', physical='$t', regex=False, auto_spill=None):
         cfg = CFG(self.program)
         newBBs = []
         for bb in cfg.bbs:
-            newBB = self._allocBlock(bb, target=target, physical='$t', regex=regex)
+            newBB = self._allocBlock(bb, target=target, physical='$t', regex=regex, auto_spill=auto_spill)
             newBBs.append(newBB)
         return newBBs
 
-    def _allocBlock(self, block, target='$t', physical='$t', regex=False):
+    def _allocBlock(self, block, target='$t', physical='$t', regex=False, auto_spill=None):
         self._resetAllocParams()
         self.newBlock.pp = block.pp
         self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
-        self.regMap = self._getRegMap(liveranges)
+        self.regMap = self._getRegMap(liveranges, auto_spill=auto_spill)
         self.sregs = self.regMap['spill']
         for sr in self.sregs:
             self._insertStackAlloc()
@@ -238,10 +241,13 @@ class GreedyMIPSAllocator(MIPSAllocator):
         return sregMap
     
     # computes a legal mapping of virtual regs to physical ones for the entire program, spilling some regs if necessary
-    def _getRegMap(self, liveranges):
+    def _getRegMap(self, liveranges, auto_spill=None):
         regMap = {}
-        regMap['spill'] = []
         mapped = []
+        regMap['spill'] = []
+        if auto_spill != None:
+            regMap['spill'] += auto_spill
+            mapped += auto_spill
         i = 0
         while i < len(self.pregs):
             maxVreg = None
@@ -332,12 +338,14 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.regPointerOffset = 0
         self.newProgram = []
 
-    def mapMCFunction(self, function, target='$t', physical='$t', regex=False):
+    def mapMCFunction(self, function, target='$t', physical='$t', regex=False, auto_spill_arrs=True):
         self._resetAllocParams()
         self.program = function.body
         self.vregs = self._getVirtualRegs(target, regex=regex)
         regMap = {}
         regMap['spill'] = self.vregs
+        if auto_spill_arrs:
+            regMap['spill'] += function.int_arrs
         regMap = self._reformatRegMapSpillField(regMap)
         function.set_reg_maps({0: regMap})
         function.set_bbs({0: BB(0, instructions=function.body)})
