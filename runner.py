@@ -22,24 +22,28 @@ def main():
     for func in functions:
         translated = []
         for i in func.body():
-            translated += instr_to_asm(i)
+            mc_instr = instr_to_asm(i)
+            translated += mc_instr
+        for i in translated:
+            print(i)
         mc_functions.append(MCFunction(int_vals=func.int_vals, int_arrs=func.int_arrs, instrs=translated))
     
-    if args.allocator == 'greedy':
-        allocator = GreedyMIPSAllocator([])
-    else:
-        allocator = NaiveMIPSAllocator([])
+    # if args.allocator == 'greedy':
+        # allocator = GreedyMIPSAllocator([])
+    # else:
+        # allocator = NaiveMIPSAllocator([])
 
-    for function in mc_functions:
-        allocator.mapMCFunction(function, target='x', physical='$t')
-        # print("regMaps: {}".format(function.reg_maps))
-        # print("bbs: {}".format(function.bbs))
+    # for function in mc_functions:
+        # allocator.mapMCFunction(function, target='x', physical='$t')
+        # # print("regMaps: {}".format(function.reg_maps))
+        # # print("bbs: {}".format(function.bbs))
 
-    # Continue selecting from here
-    for function in mc_functions:
-        res = parse_function(function)
+    # # Continue selecting from here
+    # for function in mc_functions:
+        # # print(function.reg_maps)
+        # res = parse_function(function)
 
-    # Demo code for just getting the register maps
+    # # Demo code for just getting the register maps
 
 
 

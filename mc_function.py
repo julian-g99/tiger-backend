@@ -12,6 +12,17 @@ class MCFunction:
         self.reg_maps = None
 
 
+    def num_vars(self):
+        assert(self.reg_maps is not None)
+        total = 0
+        virtuals = set()
+        for bbid, reg_map in self.reg_maps.items():
+            for virtual, physical in reg_map.items():
+                virtuals.add(virtual)
+        assert(len(virtuals) == len(self.int_vals) + len(self.int_arrs))
+        return len(virtuals)
+
+
     def set_bbs(self, bbs):
         self.bbs = bbs
         self.calls_others = MCFunction.calls_others(bbs)
@@ -22,6 +33,7 @@ class MCFunction:
         self.reg_maps = reg_maps
         self.saved_regs = MCFunction.get_saved_regs(self.reg_maps)
         self.spill_regs = MCFunction.get_spill_regs(self.reg_maps)
+        self.num_vars = self.num_vars()
         if self.bbs is not None:
             self.has_data = self.has_data()
 
@@ -42,11 +54,10 @@ class MCFunction:
     def get_saved_regs(reg_maps):
         saved_regs = set()
         saved_pattern = re.compile("\$s\d+")
-        for reg_map in reg_maps:
-            for _, mp in reg_map.items():
-                for _, reg in mp.items():
-                    if saved_pattern.match(reg):
-                        saved_regs.add(reg)
+        for _, reg_map in reg_maps.items():
+            for _, reg in reg_map.items():
+                if saved_pattern.match(reg):
+                    saved_regs.add(reg)
         output = list(saved_regs)
         output.sort()
         return output
@@ -54,11 +65,10 @@ class MCFunction:
     @staticmethod
     def get_spill_regs(reg_maps):
         spill_regs = set()
-        for reg_map in reg_maps:
-            for _, mp in reg_map.items():
-                for ir, mc in mp.items():
-                    if mc == "spill":
-                        spill_regs.add(ir)
+        for _, reg_map in reg_maps.items():
+            for ir, reg in reg_map.items():
+                if reg == "spill":
+                    spill_regs.add(ir)
         return spill_regs
 
     @staticmethod

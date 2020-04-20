@@ -20,10 +20,12 @@ def needs_pad(function: MCFunction) -> bool:
     fp = 1
     arr_length = sum(length for _, length in function.int_arrs)
     ra = 1
-    spill_count = len(function.spill_regs)
-    saved_count = len(function.saved_regs)
+    # spill_count = len(function.spill_regs)
+    # saved_count = len(function.saved_regs)
     # arg_count = arg_space(function)
-    total = fp + arr_length + spill_count + ra + saved_count
+    num_vars = function.num_vars
+    # total = fp + arr_length + spill_count + ra + saved_count
+    total = fp + ra + arr_length + num_vars
 
     return total % 2 == 1
 
@@ -56,7 +58,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     prologue.append(MCInstruction("sw", regs=[fp, sp], offset=0))
     prologue.append(MCInstruction("move", regs=[fp, sp]))
 
-    # make space for array
+    # make space for arrays
     curr_offset = -4
     for arr in function.int_arrs:
         prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-arr[1]*4)) # arr[1] should the size
@@ -64,11 +66,19 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         curr_offset -= arr[1] * 4
 
     # make space for local variables
-    if len(function.spill_regs) != 0:
-        for val in function.int_vals:
-            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            offsets[val] = curr_offset
-            curr_offset -= 4
+    # for greedy local alloc, need to save everything (even non-spilled)
+    for val in function.int_vals:
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        offsets[val] = curr_offset
+        curr_offset -= 4
+
+    # save all the t registers (as specified in the pdf)
+    for i in range(8):
+        t_reg = "$t%d" % i
+        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        prologue.append(MCInstruction("sw", regs=[t_reg, sp], imm=0))
+        offsets[t_reg] = curr_offset
+        curr_offset -= 4
 
     # padding
     if needs_pad(function):
@@ -78,11 +88,13 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     # return address
     prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
     prologue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
+    offsets["$ra"] = curr_offset
+    curr_offset -= 4
 
     # s registers
     for s in function.saved_regs:
         prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-        prologue.append(MCInstruction("sw", regs=[s, sp], offset=0)) # TODO: check if this is how the mc function is filled
+        prologue.append(MCInstruction("sw", regs=[s, sp], offset=0))
         offsets[s] = curr_offset
         curr_offset -= 4
 
@@ -91,70 +103,74 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     epilogue = []
 
     # restore the s registers
-    for s in function.saved_regs[::-1]:
-        epilogue.append(MCInstruction("lw", regs=[s, sp], offest=0))
-        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+    # for s in function.saved_regs[::-1]:
+    for s in function.saved_regs:
+        epilogue.append(MCInstruction("lw", regs=[s, fp], offset=offsets[s]))
 
     # restore the return address
-    epilogue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
-    epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+    epilogue.append(MCInstruction("lw", regs=["$ra", sp], offset=offsets["$ra"]))
+    # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    # restore t registers
+    for i in range(8):
+        t_reg = "$t%d" % i
+        epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
 
     # skip over padding if it's there
-    if needs_pad(function):
-        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+    # if needs_pad(function):
+        # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
     # tear down the local variables
-    if len(function.spill_regs) != 0:
-        spill_count = len(function.spill_regs)
-        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4*spill_count))
+    # if len(function.spill_regs) != 0:
+        # spill_count = len(function.spill_regs)
+        # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4*spill_count))
 
     # tear down the array
-    for arr in function.int_arrs:
-        epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=arr[1]*4))
+    # for arr in function.int_arrs:
+        # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=arr[1]*4))
 
     # restore the fp
+    epilogue.append(MCInstruction("move", regs=[sp, fp])) # moving sp back to fp
     epilogue.append(MCInstruction("lw", regs=[fp, sp], offset=0))
     epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
     return prologue, epilogue, offsets
 
 
-def spill(spill_count: int, reg_map: Dict[str, str], ir_regs: [str], offsets: Dict[str, int], load: bool) -> (List[MCInstruction], Dict[str, str]):
+def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
     """
     Performs spilling given a register map and the set of original virtual registers, with some additional information. At the end, outputs the spilling code as well as the complete register mapping (with every virtual register mapped to a physical register). Uses t0-t2 for spilling (since a single instruction should not have more than three registers).
 
     Args:
-        spill_count: the number of values to be spilled
         reg_map: the register mapping given by the allocator
-        ir_regs: the original (virtual) registers of the instruction
+        instr: the MCInstruction to perform spilling on
         offsets: the map from virtual register to the frame pointer offset on the stack
         load: whether this is for loading or storing
 
     Returns:
-        output: a list of MCInstructions which is the spill load/store code
-        reg_map: a new register map such that anything which was spilled is replaced by a temp register.
+        save: a list of MCInstructions which is the spill save code
+        restore: a list of MCInstructions which is the spill restore code
+        new_args: the physical registers of the instruction
     """
     # NOTE: it's assumed that the position at $fp will be used for saving the register used here
-    assert(spill_count <= 3)
-
-    if load:
-        op = "lw"
-    else:
-        op = "sw"
-
-    # spill_regs = [k for (k, v) in reg_map if v == "spill"]  # TODO: double check this
-    output = []
-    # m = {}
+    save = []
+    restore = []
+    new_args = []
 
     curr_temp = 0
     # for phys, ir in zip(phys_reg, ir_regs):
-    for ir, phys in reg_map.items():
-        if phys == "spill":
-            output.append(MCInstruction(op, regs=["$t%d"%curr_temp, "$fp"], offset=offsets[ir]))
-            reg_map[ir] = "$t%d" % curr_temp
+    for virtual in instr.regs:
+        physical = reg_map[virtual]
+        if physical == "spill":
+            temp_reg = "$t%d" % curr_temp
+            save.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+            restore.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+            new_args.append(temp_reg)
             curr_temp += 1
+        else:
+            new_args.append(physical)
 
-    return output, reg_map
+    return save, restore, new_args
 
 def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruction]]:
     """
@@ -176,144 +192,61 @@ def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruc
 
     return save_code, restore_code
 
-def convert_intrinsic(instr: MCInstruction) -> List[MCInstruction]:
-    """
-    Converts an intrinsic function call to use the relevant syscall. Note that v0 and a0 is always saved and restored, regardless of whether these registers are actually used in the function.
-    
-    Args:
-        - instr: the instruction to be translated
-    Returns:
-        - a list of instructions equivalent to the intrinsic function
-    """
-    sys_codes = {"print_int": 1,
-                "print_float": 2,
-                "print_double": 3,
-                "print_string": 4,
-                "read_int": 5,
-                "raed_float": 6,
-                "read_double": 7,
-                "read_string": 8,
-                "sbrk": 9,
-                "exit": 10,
-                "print_char": 11}
-    output = []
-    op = instr.op
-    if op == "geti" or op == "getc": # CHECK: does getc and geti actually work in the same way?
-        dest = instr.dest
-
-        # saving v0
-        save, restore = save_and_restore("$v0")
-        output += save
-
-        # moving syscode into v0
-        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["read_int"]))
-
-        # syscall
-        output.append(MCInstruction("syscall"))
-
-        # moving output into destination
-        output.append(MCInstruction("move", regs=[dest, "$v0"]))
-
-        # restoring v0
-        output += restore
-    elif op == "getf":
-        raise NotImplementedError("getf() isn't implemented as floats are not supported")
-    elif op == "puti":
-        arg = instr.arguments[0]
-
-        # saving a0 and v0
-        save_a0, restore_a0 = save_and_restore("$a0")
-        save_v0, restore_v0 = save_and_restore("$v0")
-        output += save_a0
-        output += save_v0
-
-        # moving argument into a0
-        if is_constant(arg):
-            output.append(MCInstruction("move", regs=["$a0"], imm=arg))
-        else:
-            output.append(MCInstruction("move", regs=["$a0", arg]))
-
-        # moving syscode into v0
-        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["print_int"]))
-
-        # syscall
-        output.append(MCInstruction("syscall"))
-
-        # restoring a0 and v0
-        output += restore_v0
-        output += restore_a0
-    elif op == "putf":
-        raise NotImplementedError("putf() isn't implemented as floats are not supported")
-    elif op == "putc":
-        arg = instr.arguments[0]
-
-        # saving a0 and v0
-        save_a0, restore_a0 = save_and_restore("$a0")
-        save_v0, restore_v0 = save_and_restore("$v0")
-        output += save_a0
-        output += save_v0
-
-        # moving argument into a0
-        if is_constant(arg):
-            output.append(MCInstruction("move", regs=["$a0"], imm=arg))
-        else:
-            output.append(MCInstruction("move", regs=["$a0", arg]))
-
-        # moving syscode into v0
-        output.append(MCInstruction("move", regs=["$v0"], imm=sys_codes["print_char"]))
-
-        # syscall
-        output.append(MCInstruction("syscall"))
-
-        # restoring a0 and v0
-        output += restore_v0
-        output += restore_a0
-    else:
-        raise ValueError("Unexpected intrinsic function")
-
-
 #NOTE: this function is not fully implemented
 def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
     """
     Convert a single instruction from using virtual register to physical register. Also, if this instruction is `call` or `callr`, then it's also changed to an actual machine instruction.
     Args:
+        - reg_map: the register map in this basic block
         - instr: the instruction to be changed
+        - offsets: offsets dictionary
     Return:
         - a list of instruction that's equivalent
     """
     # TODO: assume the caller's stack is already even, add padding if the number of args that need to be passed through the stack is odd
     output = []
-    # count the number of arguments
-    num_args = len(instr.arguments)
-    if num_args <= 4:
-        curr_reg = 0
-        for arg in instr.arguments:
-            arg_reg = "$a%d" % curr_reg
-            curr_reg += 1
-            # TODO: cases to consider:
-                # 1. arg is immediate value
-                # 2. arg is in a physical register
-                # 3. arg is on the stack as a local variable (i.e., it's spilled)
-                # 4. arg is on the stack as an array value
-            # FIXME: using the cases above, move the value of arg into arg_reg
-    else:
-        curr_reg = 0
-        for i in range(4):
-            # TODO: do the same as above
-            arg_reg = "%a%d" % curr_reg
-            curr_reg += 1
+    # physical_regs = [reg_map[virtual_reg] for virtual_reg in instr.regs]
+    curr_temp = 0
+    for i in range(len(instr.regs)):
+        save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
+        output += save
+        instr.regs = new_regs
+        output.append(instr)
+        output += restore
 
-        # TODO: store the rest on the stack
+    # count the number of arguments
 
     # NOTE: this if is at this level because the args and dests still need to be translated to physical registers first
     # FIXME: implement the rest of this. Right now only intrinsics is done
-    if instr.op != "callr" and instr.op != "call":
+    if instr.op == "callr" and instr.op == "call":
         intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
         if instr.name in intrinsics:
             convert_intrinsic(instr)
         output = []
+        # ------------ intergrate this ------------------ #
+        num_args = len(instr.arguments)
+        if num_args <= 4:
+            curr_reg = 0
+            for arg in instr.arguments:
+                arg_reg = "$a%d" % curr_reg
+                curr_reg += 1
+                # TODO: cases to consider:
+                    # 1. arg is immediate value
+                    # 2. arg is in a physical register
+                    # 3. arg is on the stack as a local variable (i.e., it's spilled)
+                    # 4. arg is on the stack as an array value
+                # FIXME: using the cases above, move the value of arg into arg_reg
+        else:
+            curr_reg = 0
+            for i in range(4):
+                # TODO: do the same as above
+                arg_reg = "%a%d" % curr_reg
+                curr_reg += 1
+
+            # TODO: store the rest on the stack
 
         spill_count = list(reg_map.values()).count("spill")
+        # ------------ intergrate this ------------------ #
 
         if spill_count != 0:
             spill_load, spill_map = spill(spill_count, reg_map, instr.regs, offsets, load=True)
@@ -327,7 +260,20 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
 
     return output
 
-def translate_body(function: MCFunction) -> List[MCInstruction]:
+
+def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tuple[List[MCInstruction], List[MCInstruction]]:
+    load = []
+    save = []
+    fp = "$fp"
+
+    for virt, phys in reg_map:
+        offset = offsets[virt]
+        load.append(MCInstruction("lw", regs=[phys, fp], offset=offset))
+        save.append(MCInstruction("sw", regs=[phys, fp], offset=offset))
+
+    return load, save
+
+def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInstruction]:
     """
     Translates the body of a function one by one. Should call methods like convert_instr.
 
@@ -336,11 +282,20 @@ def translate_body(function: MCFunction) -> List[MCInstruction]:
     Returns:
         - the translated output (does not include the prologue and epilogue)
     """
-    # for bb in function.bbs:
-        # for instr in bb:
-            # # FIXME: change this to actually translate the function, might want to refactor convert_instr first
+    print(function.bbs)
+    assert(function.bbs.keys() == function.reg_maps.keys())
 
-    return function.body
+    output = []
+    for k in function.bbs.keys():
+        bb = function.bbs[k]
+        reg_map = function.reg_maps[k]
+        load, save = load_and_save_locals(reg_map, offsets)
+        output += load
+        for instr in bb:
+            output += convert_instr(reg_map, instr, offsets)
+        output += save
+
+    return output
 
 def parse_function(function: MCFunction) -> List[MCInstruction]:
     """
@@ -355,8 +310,9 @@ def parse_function(function: MCFunction) -> List[MCInstruction]:
 
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
+    print("offsets: ", offsets)
     #NOTE: if the return value above is None that means it's a simple leaf
-    translated_body = translate_body(function)
+    translated_body = translate_body(function, offsets)
 
     res = prologue + translated_body + epilogue
 

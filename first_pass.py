@@ -5,7 +5,7 @@ from parser import parse_instructions
 from symbolic_map import SymbolicMap
 import re
 
-from typing import List
+from typing import List, Tuple
 
 s_map = SymbolicMap()
 
@@ -223,66 +223,219 @@ def convert_array_assign(instr):
 
     return output
 
-def function_to_asm(function: Function) -> List[MCInstruction]:
-
-    # prologue
-    prologue = []
-    sp = "$sp"
-    if function.stack_type == "simple_leaf":
-        prologue += function.body
-    elif function.stack_type == "data_leaf":
-        # make space for array
-        curr_offset = 0
-        if function.has_array:
-            for arr in function.int_arrs:
-                prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=arr[1]*4)) #arr[1] should be the size of the array
-                curr_offset += arr[1]
-                # FIXME: give the array address to something (probably a map?)
-
-        # add padding if needed
-        if curr_offset + function.saved_regs_count % 2 == 1:
-            prologue.append(MCInstruction("addiu", regs=[sp, sp], offset=4))
-
-        # store any saved registers that we will change
-        prologue.append(MCInstruction("addiu", regs=["$sp", "$sp"], offset=function.saved_regs_count * 4))
-        curr_offset += function.saved_regs_count # NOTE: this is only for keep track of double-words
-        for i in range(function.saved_regs_count):
-            prologue.append(MCInstruction("sw", regs=["$sp", "$sp"], offset=i*4))
-    elif function.stack_type == "nonleaf":
-        # TODO: implement
-        a = 0
-
-
-
-    # body
-    body = []
-    for i in function.body:
-        body += instr_to_asm(body)
-
-    #epilogue
-    epilogue = []
-    sp = "$sp"
-    if function.stack_type == "simple_leaf":
-        epilogue.append(MCInstruction("jr", regs="$ra"))
-
 def convert_label(instr: IRInstruction):
     assert(instr.instruction_type == "label")
     return [MCInstruction("label", target=instr.argument_list[0])]
 
+def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruction]]:
+    """
+    Computes the save and restore code for a single register.
+    Args:
+        - reg_name: the register to be saved and restored, make sure this is a physical register
+    Returns:
+        - a tuple of list of instructions. The first of which is the save code, the second is the restore code
+    """
+    save_code = []
+    restore_code = []
+    sp = "$sp"
+
+    save_code.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+    save_code.append(MCInstruction("sw", regs=[reg_name, sp], offset=0))
+
+    restore_code.append(MCInstruction("lw", regs=[reg_name, sp], offset=0))
+    restore_code.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
+
+    return save_code, restore_code
+
+def convert_intrinsic(instr: IRInstruction, name: str, args: List[str], dest: str=None) -> List[MCInstruction]:
+    """
+    Converts an intrinsic function call to use the relevant syscall. Note that v0 and a0 is always saved and restored, regardless of whether these registers are actually used in the function.
+    
+    Args:
+        - instr: the instruction to be translated
+    Returns:
+        - a list of instructions equivalent to the intrinsic function
+    """
+    sys_codes = {"print_int": 1,
+                "print_float": 2,
+                "print_double": 3,
+                "print_string": 4,
+                "read_int": 5,
+                "raed_float": 6,
+                "read_double": 7,
+                "read_string": 8,
+                "sbrk": 9,
+                "exit": 10,
+                "print_char": 11}
+    output = []
+    op = name
+    if op == "geti" or op == "getc": # CHECK: does getc and geti actually work in the same way?
+        # saving v0, CHECK: is this really needed?
+        # save, restore = save_and_restore("$v0")
+        # output += save
+
+        # moving syscode into v0
+        output.append(MCInstruction("li", regs=["$v0"], imm=sys_codes["read_int"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # moving output into destination
+        output.append(MCInstruction("move", regs=[dest, "$v0"]))
+
+        # restoring v0
+        # output += restore
+        return output
+    elif op == "getf":
+        raise NotImplementedError("getf() isn't implemented as floats are not supported")
+    elif op == "puti":
+        # arg = instr.arguments[0]
+        arg = args[0]
+
+        # saving a0 and v0
+        # save_a0, restore_a0 = save_and_restore("$a0")
+        # save_v0, restore_v0 = save_and_restore("$v0")
+        # output += save_a0
+        # output += save_v0
+
+        # moving argument into a0
+        if is_constant(arg):
+            output.append(MCInstruction("li", regs=["$a0"], imm=arg))
+        else:
+            output.append(MCInstruction("move", regs=["$a0", arg]))
+
+        # moving syscode into v0
+        output.append(MCInstruction("li", regs=["$v0"], imm=sys_codes["print_int"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # restoring a0 and v0
+        # output += restore_v0
+        # output += restore_a0
+        return output
+    elif op == "putf":
+        raise NotImplementedError("putf() isn't implemented as floats are not supported")
+    elif op == "putc":
+        # arg = instr.arguments[0]
+        arg = args[0]
+
+        # saving a0 and v0
+        # save_a0, restore_a0 = save_and_restore("$a0")
+        # save_v0, restore_v0 = save_and_restore("$v0")
+        # output += save_a0
+        # output += save_v0
+
+        # moving argument into a0
+        if is_constant(arg):
+            output.append(MCInstruction("li", regs=["$a0"], imm=arg))
+        else:
+            output.append(MCInstruction("move", regs=["$a0", arg]))
+
+        # moving syscode into v0
+        output.append(MCInstruction("li", regs=["$v0"], imm=sys_codes["print_char"]))
+
+        # syscall
+        output.append(MCInstruction("syscall"))
+
+        # restoring a0 and v0
+        # output += restore_v0
+        # output += restore_a0
+        return output
+    else:
+        raise ValueError("Unexpected intrinsic function: %s" % op)
+
+
+
 def convert_calls(instr: IRInstruction):
     # NOTE: this is temporary and should not ever end up in the final output
     assert(instr.instruction_type == "call" or instr.instruction_type == "callr")
+    intrinsics = ["geti", "getf", "getc", "puti", "putf", "putc"]
+    sp = "$sp"
+    print("argument_list: ", instr.argument_list)
     if instr.instruction_type == "call":
         function_name = instr.argument_list[0]
         arguments = instr.argument_list[1:]
-        return MCInstruction("call", function_name=function_name, arguments=arguments)
+        if function_name in intrinsics:
+            return convert_intrinsic(instr, function_name, arguments)
+
+        output = []
+        # normal function call
+        first_section = arguments[:4]
+        for i, arg in enumerate(first_section):
+            arg_reg = "$a%d" % i
+            if is_constant(arg):
+                output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
+            else:
+                output.append(MCInstruction("move", regs=[arg_reg, arg]))
+
+        second_section = arguments[4:][:-1] # pushing in reverse order
+        temp = s_map["CONVERT_CALLS_TEMP_REG"]
+        stack_length = 0
+        for arg in second_section:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            stack_length += 1
+            if is_constant(arg):
+                output.append(MCInstruction("li", regs=[temp], imm=arg))
+                output.append(MCInstruction("sw", regs=[temp, sp], imm=0))
+            else:
+                output.append(MCInstruction("sw", regs=[arg, sp], imm=0))
+        del s_map["CONVERT_CALLS_TEMP_REG"]
+        # paddding
+        if len(second_section) % 2 == 1:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            stack_length += 1
+
+        # the actual call itself
+        output.append("jal", target=function_name)
+
+        # popping the stack
+        if stack_length != 0:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
+
     else:
         return_dest = instr.argument_list[0]
         function_name = instr.argument_list[1]
         arguments = instr.argument_list[2:]
-        return MCInstruction("callr", return_dest=return_dest, function_name=function_name, arguments=arguments)
+        if function_name in intrinsics:
+            return convert_intrinsic(instr, function_name, arguments, return_dest)
 
+        output = []
+        # normal function call
+        first_section = arguments[:4]
+        for i, arg in enumerate(first_section):
+            arg_reg = "$a%d" % i
+            if is_constant(arg):
+                output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
+            else:
+                output.append(MCInstruction("move", regs=[arg_reg, arg]))
 
+        second_section = arguments[4:][:-1] # pushing in reverse order
+        temp = s_map["CONVERT_CALLS_TEMP_REG"]
+        stack_length = 0
+        for arg in second_section:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            stack_length += 1
+            if is_constant(arg):
+                output.append(MCInstruction("li", regs=[temp], imm=arg))
+                output.append(MCInstruction("sw", regs=[temp, sp], imm=0))
+            else:
+                output.append(MCInstruction("sw", regs=[arg, sp], imm=0))
+        del s_map["CONVERT_CALLS_TEMP_REG"]
+        # paddding
+        if len(second_section) % 2 == 1:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            stack_length += 1
+
+        # the actual call itself
+        output.append("jal", target=function_name)
+
+        # reading the return value
+        output.append("move", regs=[return_dest, "$v0"]) # shouldn't have anything that doesn't fit in one word
+
+        # popping the stack
+        if stack_length != 0:
+            output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
 
 def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     """
@@ -306,15 +459,15 @@ def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
     elif instr.instruction_type in ["call", "callr"]:
         return convert_calls(instr)
 
-def main():
-    instructions = parse_instructions("./test_cases/bfs/bfs/ir")
-    functions = find_functions(instructions)
-    output = []
-    for f in functions:
-        output += function_to_asm(f)
+# def main():
+    # instructions = parse_instructions("./test_cases/bfs/bfs/ir")
+    # functions = find_functions(instructions)
+    # output = []
+    # for f in functions:
+        # output += function_to_asm(f)
 
-    # FIXME: refactor this to output to a file instead of returning
-    return output
+    # # FIXME: refactor this to output to a file instead of returning
+    # return output
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+    # main()

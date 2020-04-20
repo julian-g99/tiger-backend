@@ -1,0 +1,43 @@
+{0: {'x0': 'spill', 'x1': 'spill', 'x2': 'spill', 'x3': 'spill', 'x4': 'spill', 'x5': 'spill', 'x6': 'spill', 'x7': 'spill', 'x8': 'spill', 'x9': 'spill', 'x10': 'spill', 'x11': 'spill', 'x12': 'spill', 'x13': 'spill'}}
+addiu $sp, $sp, -4
+sw $fp, ($sp)
+move $fp, $sp
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+addiu $sp, $sp, -4
+sw $ra, ($sp)
+
+addi x0, zero, 0
+addi x1, zero, 0
+addi x2, zero, 0
+addi x3, zero, 0
+addi x4, zero, 0
+addi x5, zero, 0
+addi x6, zero, 0
+addi x7, zero, 0
+addi x8, zero, 0
+addi x9, zero, 0
+addi x10, zero, 0
+addi x11, zero, 0
+addi x12, zero, 0
+addi x13, zero, 0
+mult x1, x2
+mflo x0
+
+sw $ra, ($sp)
+addiu $sp, $sp, 4
+addiu $sp, $sp, 56
+lw $fp, ($sp)
+addiu $sp, $sp, 4

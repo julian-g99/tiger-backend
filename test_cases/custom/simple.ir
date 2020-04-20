@@ -17,6 +17,5 @@ float-list:
     assign, a12, 0
     assign, a13, 0
 
-    mult, ii, a, b
-    add, ij, b, c
+    mult, a0, a1, a2
 #end_function
