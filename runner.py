@@ -5,6 +5,7 @@ from second_pass import parse_function
 import argparse
 import pprint
 from mc_function import MCFunction
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--allocator', type=str, default='greedy', help='the type of register allocation to perform (\'naive\' or \'greedy\')')
@@ -28,22 +29,23 @@ def main():
             print(i)
         mc_functions.append(MCFunction(int_vals=func.int_vals, int_arrs=func.int_arrs, instrs=translated))
     
-    # if args.allocator == 'greedy':
-        # allocator = GreedyMIPSAllocator([])
-    # else:
-        # allocator = NaiveMIPSAllocator([])
+    if args.allocator == 'greedy':
+        allocator = GreedyMIPSAllocator([])
+    else:
+        allocator = NaiveMIPSAllocator([])
 
-    # for function in mc_functions:
-        # allocator.mapMCFunction(function, target='x', physical='$t')
-        # # print("regMaps: {}".format(function.reg_maps))
-        # # print("bbs: {}".format(function.bbs))
+    for function in mc_functions:
+        pattern = re.compile('x')
+        allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
+        # print("regMaps: {}".format(function.reg_maps))
+        # print("bbs: {}".format(function.bbs))
 
-    # # Continue selecting from here
-    # for function in mc_functions:
-        # # print(function.reg_maps)
-        # res = parse_function(function)
+    # Continue selecting from here
+    for function in mc_functions:
+        # print(function.reg_maps)
+        res = parse_function(function)
 
-    # # Demo code for just getting the register maps
+    # Demo code for just getting the register maps
 
 
 

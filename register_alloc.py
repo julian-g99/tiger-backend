@@ -1,6 +1,7 @@
 from mc_instruction import MCInstruction
 from control_flow_graph import CFG, BB
 import heapq
+import re
 
 PHYSICALS = {'$t':10, '$s':8}
 ZREG = '$zero'
@@ -46,13 +47,19 @@ class MIPSAllocator:
             MCInstruction('sw', regs=[ZREG, SPREG], offset=0)
         )
     
-    def _getVirtualRegs(self, target):
+    def _getVirtualRegs(self, target, regex=False):
         regs = []
         for instruction in self.program:
             if instruction.regs != None:
                 for r in instruction.regs:
-                    if (r[:len(target)] == target) & (r not in regs):
-                        regs.append(r)
+                    if regex:
+                        if (type(target) != re.Pattern):
+                            raise TypeError("target must be a compiled pattern. Use re.compile()")
+                        if re.fullmatch(target, r) != None:
+                            regs.append(r)
+                    else:
+                        if (r[:len(target)] == target) & (r not in regs):
+                            regs.append(r)
         return regs
     
     def _reformatRegMapSpillField(self, regMap):
@@ -111,48 +118,39 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = []
         self.newBlock = BB(0)
 
-    def mapMCFunction(self, function, target='$t', physical='$t'):
+    def mapMCFunction(self, function, target='$t', physical='$t', regex=False):
         cfg = CFG(function.body)
         regMaps = {}
         self.program = function.body
         bbDict = {}
         for bb in cfg.bbs:
             bbDict[bb.pp] = bb
-            regMap = self._getBlockRegMap(bb, target=target, physical=physical)
+            regMap = self._getBlockRegMap(bb, target=target, physical=physical, regex=regex)
             regMap = self._reformatRegMapSpillField(regMap)
             regMaps[bb.pp] = regMap
         function.set_reg_maps(regMaps)
         function.set_bbs(bbDict)
     
-    def _getBlockRegMap(self, block, target='$t', physical='$t'):
-        if type(target) != str:
-            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not self._canAlloc(target):
-            raise ValueError("There are not enough target registers to allocate target {}".format(target))
-        self._resetAllocParams()
+    def _getBlockRegMap(self, block, target='$t', physical='$t', regex=False):
         self.newBlock.pp = block.pp
-        self.vregs = self._getVirtualRegs(target)
+        self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
         self.regMap = self._getRegMap(liveranges)
         return self.regMap
 
-    def allocProgram(self, target='$t', physical='$t'):
+    def allocProgram(self, target='$t', physical='$t', regex=False):
         cfg = CFG(self.program)
         newBBs = []
         for bb in cfg.bbs:
-            newBB = self._allocBlock(bb, target=target, physical='$t')
+            newBB = self._allocBlock(bb, target=target, physical='$t', regex=regex)
             newBBs.append(newBB)
         return newBBs
 
-    def _allocBlock(self, block, target='$t', physical='$t'):
-        if type(target) != str:
-            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not self._canAlloc(target):
-            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+    def _allocBlock(self, block, target='$t', physical='$t', regex=False):
         self._resetAllocParams()
         self.newBlock.pp = block.pp
-        self.vregs = self._getVirtualRegs(target)
+        self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
         liveranges = self._getLiveRanges(block)
         self.regMap = self._getRegMap(liveranges)
@@ -334,27 +332,19 @@ class NaiveMIPSAllocator(MIPSAllocator):
         self.regPointerOffset = 0
         self.newProgram = []
 
-    def mapMCFunction(self, function, target='$t', physical='$t'):
-        if type(target) != str:
-            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not self._canAlloc(target):
-            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+    def mapMCFunction(self, function, target='$t', physical='$t', regex=False):
         self._resetAllocParams()
         self.program = function.body
-        self.vregs = self._getVirtualRegs(target)
+        self.vregs = self._getVirtualRegs(target, regex=regex)
         regMap = {}
         regMap['spill'] = self.vregs
         regMap = self._reformatRegMapSpillField(regMap)
         function.set_reg_maps({0: regMap})
         function.set_bbs({0: BB(0, instructions=function.body)})
 
-    def allocProgram(self, target='$t', physical='$t'):
-        if type(target) != str:
-            raise TypeError("target {} must be of type str. Got {}".format(target, type(target)))
-        if not self._canAlloc(target):
-            raise ValueError("There are not enough target registers to allocate target {}".format(target))
+    def allocProgram(self, target='$t', physical='$t', regex=False):
         self._resetAllocParams()
-        self.vregs = self._getVirtualRegs(target)
+        self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
         for vr in self.vregs:
             self._insertStackAlloc()
