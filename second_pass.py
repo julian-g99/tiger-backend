@@ -288,8 +288,19 @@ def parse_function(function: MCFunction) -> List[MCInstruction]:
     """
     assert(len(function.reg_maps) == len(function.bbs))
 
+    for _, reg_map in function.reg_maps.items():
+        for i, arg in enumerate(function.args):
+            if i < 4:
+                reg_map[arg] = "$a%d" % i
+            else:
+                reg_map[arg] = "spill"
+
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
+    curr_offset = 4
+    for arg in function.args[4:]:
+        offsets[arg] = curr_offset 
+        curr_offset += 4
     sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
     #NOTE: if the return value above is None that means it's a simple leaf
     translated_body = translate_body(function, offsets)

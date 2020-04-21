@@ -25,7 +25,7 @@ def main():
         for i in func.body():
             mc_instr = instr_to_asm(i)
             translated += mc_instr
-        mc_functions.append(MCFunction(name=func.name, int_arrs=func.int_arrs, instrs=translated))
+        mc_functions.append(MCFunction(name=func.name, args=func.args, int_arrs=func.int_arrs, instrs=translated))
 
     if args.allocator == 'greedy':
         allocator = GreedyMIPSAllocator([])

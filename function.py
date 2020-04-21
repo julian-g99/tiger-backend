@@ -44,7 +44,12 @@ class Function:
         closing = s.index(")")
         arg_list = s[opening+1: closing]
 
-        return arg_list.split(", ")
+        args = []
+        for arg in arg_list.split(", "):
+            if arg != "":
+                args.append(arg.split()[1])
+
+        return args
 
 
     def __get_rtype_and_name(self):

@@ -51,15 +51,28 @@ def convert_arithmetic(instr: IRInstruction) -> str:
             output.append(MCInstruction(instr.instruction_type, regs=[dest, src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
             # src1 is constant
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src0], imm=src1))
+            src1 = int(src1)
+            if instr.instruction_type == "add":
+                output.append(MCInstruction("addi", regs=[dest, src0], imm=src1))
+            else:
+                output.append(MCInstruction("addi", regs=[dest, src0], imm=-src1))
         elif is_constant(src0) and not is_constant(src1):
             # src0 is constant
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src1], imm=src0))
+            src = int(src0)
+            if instr.instruction_type == "add":
+                output.append(MCInstruction("addi", regs=[dest, src1], imm=src0))
+            else:
+                output.append(MCInstruction("li", regs=[dest], imm=src0))
+                output.append(MCInstruction("sub", regs=[dest], imm=src1))
         else:
             # both are constant
-            output.append(MCInstruction("move", regs=['$0']))
-            output.append(MCInstruction("addi", regs=[src0]))
-            output.append(MCInstruction(instr.instruction_type+'i', regs=[dest, src1]))
+            src1 = int(src1)
+            src0 = int(src0)
+            output.append(MCInstruction("li", regs=[dest], imm=src0))
+            if instr.instruction_type == "add":
+                output.append(MCInstruction("addi", regs=[dest], imm=src1))
+            else:
+                output.append(MCInstruction("addi", regs=[dest], imm=-src1))
     if instr.instruction_type == "mult":
         # FIXME: currently assumes the result will be 32 bit
         if not is_constant(src0) and not is_constant(src1):
