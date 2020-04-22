@@ -16,6 +16,7 @@ class MIPSProgram():
             functions = []
             for group in groups:
                 functions.append(MIPSFunction(group))
+            return functions
 
     def _parseTigerIRFunctionDelims(self, lines):
         functions = []

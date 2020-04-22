@@ -1,12 +1,17 @@
 import re
+from tiger_ir_parser import parseLine
 
 class MIPSFunction():
     def __init__(self, lines, framePointer=None):
         self.instructions = self._fromTigerIRLines(lines)
         self.framePointer = framePointer
     
-    def fromTigerIRLines(self, lines):
-        pass
+    def _fromTigerIRLines(self, lines):
+        instructions = []
+        for line in lines:
+            parsed = parseLine(line)
+            instructions += parsed
+        return instructions
 
     def _parseTigerIRHeader(self, lines):
         pass

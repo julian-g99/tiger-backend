@@ -12,11 +12,8 @@ def main():
     args = parser.parse_args()
     fname = args.input
     program = MIPSProgram(inputTigerIRFile=fname)
-    print(program.functions)
-    for func in program.functions:
-        print("====")
-        for f in func:
-            print(f)
+    for i in program.functions[0].instructions:
+        print(i)
 
 if __name__ == "__main__":
     main()

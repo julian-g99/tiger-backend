@@ -1,0 +1,57 @@
+#start_function
+void main():
+    int-list:
+    float-list:
+
+        assign, z, z
+        assign, z, 0
+
+        add, z, z, z
+        add, z, z, 1
+
+        sub, z, z, z
+        sub, z, z, 1
+
+        mult, z, z, z
+        mult, z, z, 1
+
+        div, z, z, z
+        div, z, z, 1
+
+        and, z, z, z
+        and, z, z, 1
+
+        or, z, z, z
+        or, z, z, 1
+
+        goto, end
+
+        assign, arr, 4, 0
+
+        breq, label, z, z
+        breq, label, z, 1
+
+        brneq, label, z, z
+        brneq, label, z, 1
+
+        brlt, label, z, z
+        brlt, label, z, 1
+
+        brgt, label, z, z
+        brgt, label, z, 1
+
+        brgeq, label, z, z
+        brgeq, label, z, 1
+
+        brleq, label, z, z
+        brleq, label, z, 1
+
+        array_store, z, arr, 1
+        array_store, 1, arr, 2
+
+        array_load, z, arr, 1
+
+        return, z
+        return, 3
+
+#end_function
