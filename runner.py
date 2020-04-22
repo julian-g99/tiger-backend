@@ -1,6 +1,6 @@
 import argparse
 
-from MIPSProgram import MIPSProgram
+from mips_program import MIPSProgram
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--allocator', type=str, default='greedy', help='the type of register allocation to perform (\'naive\' or \'greedy\')')
@@ -13,7 +13,7 @@ def main():
     fname = args.input
     program = MIPSProgram(inputTigerIRFile=fname)
     for f in program.functions:
-        print("====")
+        print("==== {}".format(f.name))
         for i in f.instructions:
             print(i)
 

@@ -13,6 +13,7 @@ array_load_ops = ['array_load']
 
 regex_var = re.compile("[a-zA-Z_][a-zA-z0-9_]*")
 regex_imm = re.compile("[0-9]+")
+regex_label = re.compile("[a-zA-Z_][a-zA-z0-9_]*:")
 
 opcodeParseTable = {
     'add'           :   'add',
@@ -60,6 +61,8 @@ immOpcodeParseTable = {
 
 
 def parseLine(line):
+    if _isLabel(line):
+        return [ MCInstruction('label', target=line[:-1]) ]
     tokens = line.split(",")
     tokens = [t.strip(" ") for t in tokens]
     if len(tokens) < 1:
@@ -73,11 +76,11 @@ def parseLine(line):
     elif op in branch_ops:
         return _parseBranch(tokens)
     elif op in return_ops:
-        return _parseReturn(tokens)
+        return [line] # parse after callin convention
     elif op in call_ops:
-        return [line] # calling convention will handle this
+        return _parseCall(tokens)
     elif op in callr_ops:
-        return [line] # calling convention will handle this
+        return _parseCallr(tokens)
     elif op in array_store_ops:
         return _parseArrayStore(tokens)
     elif op in array_load_ops:
@@ -94,26 +97,43 @@ def _isImm(token):
     return re.fullmatch(regex_imm, token) != None
 
 
+def _isLabel(token):
+    return re.fullmatch(regex_label, token) != None
+
+
 def _parseBinary(tokens):
     regs = []
-    imm = None
+    imms = []
     for t in tokens[1:]:
         if _isVar(t):
             regs.append(t)
         elif _isImm(t):
-            imm = t
+            imms.append(t)
         else:
             raise ParseException("Failed to parse token: {} of tokens: {}".format(t, tokens))
     if len(regs) < 0:
         raise ParseException("Could not find a variable in tokens: {}".format(tokens))
-    if (imm != None) and (immOpcodeParseTable[tokens[0]] == None):
-        return _getImmInstrs(tokens[0], imm=imm, regs=regs)
-    elif (imm != None):
-        op = immOpcodeParseTable[tokens[0]]
-        return [MCInstruction(op, regs=regs, imm=imm)]
-    else:
+    if len(imms) == 2:
+        # special case of double imms
         op = opcodeParseTable[tokens[0]]
-        return [MCInstruction(op, regs=regs)]
+        regs += ['$x0', '$x1']
+        return [
+            MCInstruction('addi', regs=['$x0', '$zero'], imm=imms[0]),
+            MCInstruction('addi', regs=['$x1', '$zero'], imm=imms[1]),
+            MCInstruction(op, regs=regs)
+        ]
+    else:
+        imm = None
+        if len(imms) != 0:
+            imm = imms[0]
+        if (imm != None) and (immOpcodeParseTable[tokens[0]] == None):
+            return _getImmInstrs(tokens[0], imm=imm, regs=regs)
+        elif (imm != None):
+            op = immOpcodeParseTable[tokens[0]]
+            return [MCInstruction(op, regs=regs, imm=imm)]
+        else:
+            op = opcodeParseTable[tokens[0]]
+            return [MCInstruction(op, regs=regs)]
 
 
 def _parseAssign(tokens):
@@ -177,16 +197,18 @@ def _parseBranch(tokens):
         instructions = []
         if (imm != None):
             op = 'subi'
-            regs = ['$x'] + regs
+            regs = ['$x0'] + regs
             instructions.append(MCInstruction(op, regs=regs, imm=imm))
         else:
-            regs = ['$x'] + regs
+            regs = ['$x0'] + regs
             instructions.append(MCInstruction('sub', regs=regs))
         op = opcodeParseTable[tokens[0]]
-        instructions.append(MCInstruction(op, regs=['$x'], target=target))
+        instructions.append(MCInstruction(op, regs=['$x0'], target=target))
         return instructions
 
-def _parseReturn(tokens):
+def parseReturn(line):
+    tokens = line.split(",")
+    tokens = [t.strip(" ") for t in tokens]
     regs = None
     imm = None
     if _isVar(tokens[1]):
@@ -198,8 +220,8 @@ def _parseReturn(tokens):
     op = opcodeParseTable[tokens[0]]
     if imm != None:
         instructions = []
-        instructions.append(MCInstruction('addi', regs=['$x', '$zero'], imm=imm))
-        instructions.append(MCInstruction('sw', regs=['$x', '$sp'], offset=0))
+        instructions.append(MCInstruction('addi', regs=['$x0', '$zero'], imm=imm))
+        instructions.append(MCInstruction('sw', regs=['$x0', '$sp'], offset=0))
         instructions.append(MCInstruction(op, regs=['$ra'])) # this assumes calling convention has loaded the value of $ra
         return instructions
     else:
@@ -224,8 +246,8 @@ def _parseArrayStore(tokens):
     op = opcodeParseTable[tokens[0]]
     instructions = []
     if imm != None:   
-        instructions.append(MCInstruction('addi', regs=['$x', '$zero'], imm=imm))
-        instructions.append(MCInstruction('sw', regs=['$x', arrayReg], offset=offset))
+        instructions.append(MCInstruction('addi', regs=['$x0', '$zero'], imm=imm))
+        instructions.append(MCInstruction('sw', regs=['$x0', arrayReg], offset=offset))
         return instructions
     else:
         regs.append(arrayReg)
@@ -241,13 +263,86 @@ def _parseArrayLoad(tokens):
     return [MCInstruction('lw', regs=regs, offset=offset)]
 
 
+# includes some calling convention
+def _parseCall(tokens):
+    instructions = []
+    op = opcodeParseTable[tokens[0]]
+    funcName = tokens[1]
+    # save args
+    for t in tokens[2:]: # start at first arg
+        instructions += _getStackAlloc(1)
+        if _isVar(t):
+            instructions += _getRegStore(t)
+        elif _isImm(t):
+            instructions += _getImmStore(t)
+        else:
+            raise ParseException("Failed to parse token: {} of tokens: {}".format(t, tokens))
+    # jump and link
+    instructions.append(MCInstruction(op, target=funcName))
+    # pop args
+    instructions += _getStackPop(len(tokens) - 2)
+    return instructions
+
+
+# includes some calling convention
+def _parseCallr(tokens):
+    op = opcodeParseTable[tokens[0]]
+    returnReg = tokens[1]
+    funcName = tokens[2]
+    instructions = []
+    # save args
+    for t in tokens[3:]: # start at first arg
+        instructions += _getStackAlloc(1)
+        if _isVar(t):
+            instructions += _getRegStore(t)
+        elif _isImm(t):
+            instructions += _getImmStore(t)
+        else:
+            raise ParseException("Failed to parse token: {} of tokens: {}".format(t, tokens))
+    # alloc for return value
+    instructions += _getStackAlloc(1)
+    # jump and link
+    instructions.append(MCInstruction(op, target=funcName))
+    # pop return value
+    instructions += _getRegLoad(returnReg)
+    instructions += _getStackPop(1)
+    # pop args
+    instructions += _getStackPop(len(tokens) - 2)
+    return instructions
+
+
+def _getStackAlloc(amount):
+        imm = amount * -4
+        return [ MCInstruction('addi', regs=['$sp', '$sp'], imm=imm) ]
+
+
+def _getImmStore(imm):
+    return [
+        MCInstruction('addi', regs=['$x0', '$zero'], imm=imm),
+        MCInstruction('sw', regs=['$x0', '$sp'], offset=0)
+    ]
+
+
+def _getRegStore(reg):
+        return [ MCInstruction('sw', regs=[reg, '$sp'], offset=0) ]
+
+
+def _getRegLoad(reg):
+        return [ MCInstruction('lw', regs=[reg, '$sp'], offset=0) ]
+
+
+def _getStackPop(amount):
+    imm = amount * 4
+    return [ MCInstruction('addi', regs=['$sp', '$sp'], imm=imm) ]
+
+
 def _getImmInstrs(token0, imm=None, regs=None, target=None):
-    immSeedInstr = MCInstruction('addi', regs=['$x', '$zero'], imm=imm)
+    immSeedInstr = MCInstruction('addi', regs=['$x0', '$zero'], imm=imm)
     op = opcodeParseTable[token0]
     if regs != None:
-        regs.append('$x')
+        regs.append('$x0')
     else:
-        regs = ['$x']
+        regs = ['$x0']
     baseInstr = MCInstruction(op, regs=regs, target=target)
     return [immSeedInstr, baseInstr]
 
