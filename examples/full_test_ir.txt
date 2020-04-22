@@ -1,6 +1,6 @@
 #start_function
 void main():
-int-list: a[2]
+int-list: arr[2]
 float-list:
     add, a, 0, 1
     add, b, 0, 1

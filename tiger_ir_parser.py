@@ -307,7 +307,7 @@ def _parseCallr(tokens):
     instructions += _getRegLoad(returnReg)
     instructions += _getStackPop(1)
     # pop args
-    instructions += _getStackPop(len(tokens) - 2)
+    instructions += _getStackPop(len(tokens) - 3)
     return instructions
 
 

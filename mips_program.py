@@ -60,38 +60,38 @@ class MIPSProgram():
                 convention.append(self._getRegStore('$ra'))
                 # dec stack by 1
                 convention.append(self._getStackAlloc(1))
-            # loop to end of function or first return
-            foundReturn = False
-            line = None
-            if len(func.instructions) > 0:
-                i = 0
-                line = func.instructions[i]
-                convention.append(line)
-                while (i < len(func.instructions)) and type(line) != str: # return instructions are left as str to be parsed after calling convention
-                    i += 1
+                # loop to end of function or first return
+                foundReturn = False
+                line = None
+                if len(func.instructions) > 0:
+                    i = 0
+                    line = func.instructions[i]
+                    convention.append(line)
+                    while (i < len(func.instructions)) and type(line) != str: # return instructions are left as str to be parsed after calling convention
+                        i += 1
+                        if i < len(func.instructions):
+                            line = func.instructions[i]
+                            convention.append(line)
                     if i < len(func.instructions):
-                        line = func.instructions[i]
-                        convention.append(line)
-                if i < len(func.instructions):
-                    # don't keep the found return list
-                    convention.pop()
-                    foundReturn = True
-            # inc stack by 1
-            convention.append(self._getStackPop(1))
-            # load $ra from the stack
-            convention.append(self._getRegLoad('$ra'))
-            convention.append(self._getStackPop(1))
-            # load all 8 $s regs from the stack
-            for j in range(0, 8):
-                sreg = '$s' + str(7-j)
-                convention.append(self._getRegLoad(sreg))
+                        # don't keep the found return list
+                        convention.pop()
+                        foundReturn = True
+                # inc stack by 1
                 convention.append(self._getStackPop(1))
-            if foundReturn:
-                # parse return instruction
-                convention += parseReturn(line)
-            # insert function name label
-            convention = parseLine("{}:".format(func.name)) + convention
-            func.instructions = convention
+                # load $ra from the stack
+                convention.append(self._getRegLoad('$ra'))
+                convention.append(self._getStackPop(1))
+                # load all 8 $s regs from the stack
+                for j in range(0, 8):
+                    sreg = '$s' + str(7-j)
+                    convention.append(self._getRegLoad(sreg))
+                    convention.append(self._getStackPop(1))
+                if foundReturn:
+                    # parse return instruction
+                    convention += parseReturn(line)
+                # insert function name label
+                convention = parseLine("{}:".format(func.name)) + convention
+                func.instructions = convention
 
 
     def _getStackAlloc(self, amount):

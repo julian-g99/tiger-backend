@@ -1,0 +1,91 @@
+main:
+li $v0, 9
+la $a0, 8
+syscall
+move arr, $v0
+addi $x0, $zero, 0
+addi $x1, $zero, 1
+add a, $x0, $x1
+addi $x0, $zero, 0
+addi $x1, $zero, 1
+add b, $x0, $x1
+sw a, 0(arr)
+sw b, 4(arr)
+addi $sp, $sp, -4
+sw arr, 0($sp)
+addi $sp, $sp, -4
+addi $x0, $zero, 2
+sw $x0, 0($sp)
+addi $sp, $sp, -4
+jal arrSum
+lw r, 0($sp)
+addi $sp, $sp, 4
+addi $sp, $sp, 8
+
+addi $sp, $sp, 4
+lw $ra, 0($sp)
+addi $sp, $sp, 4
+lw $s7, 0($sp)
+addi $sp, $sp, 4
+lw $s6, 0($sp)
+addi $sp, $sp, 4
+lw $s5, 0($sp)
+addi $sp, $sp, 4
+lw $s4, 0($sp)
+addi $sp, $sp, 4
+lw $s3, 0($sp)
+addi $sp, $sp, 4
+lw $s2, 0($sp)
+addi $sp, $sp, 4
+lw $s1, 0($sp)
+addi $sp, $sp, 4
+lw $s0, 0($sp)
+addi $sp, $sp, 4
+==== arrSum
+arrSum:
+addi $sp, $sp, -4
+sw $s0, 0($sp)
+addi $sp, $sp, -4
+sw $s1, 0($sp)
+addi $sp, $sp, -4
+sw $s2, 0($sp)
+addi $sp, $sp, -4
+sw $s3, 0($sp)
+addi $sp, $sp, -4
+sw $s4, 0($sp)
+addi $sp, $sp, -4
+sw $s5, 0($sp)
+addi $sp, $sp, -4
+sw $s6, 0($sp)
+addi $sp, $sp, -4
+sw $s7, 0($sp)
+addi $sp, $sp, -4
+sw $ra, 0($sp)
+addi $sp, $sp, -4
+lw arr, 48($sp)
+lw x, 44($sp)
+lw a, 0(arr)
+lw b, 0(arr)
+add c, a, b
+add c, c, x
+addi $sp, $sp, 4
+lw $ra, 0($sp)
+addi $sp, $sp, 4
+lw $s7, 0($sp)
+addi $sp, $sp, 4
+lw $s6, 0($sp)
+addi $sp, $sp, 4
+lw $s5, 0($sp)
+addi $sp, $sp, 4
+lw $s4, 0($sp)
+addi $sp, $sp, 4
+lw $s3, 0($sp)
+addi $sp, $sp, 4
+lw $s2, 0($sp)
+addi $sp, $sp, 4
+lw $s1, 0($sp)
+addi $sp, $sp, 4
+lw $s0, 0($sp)
+addi $sp, $sp, 4
+sw c, 0($sp)
+jr $ra

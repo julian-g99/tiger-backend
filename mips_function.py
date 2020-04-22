@@ -20,7 +20,7 @@ class MIPSFunction():
         localArrays = self._parseTigerIRLocalArrays(lines)
         # alloc local arrays
         for arr in localArrays:
-            line = "assign {}, {}, 0".format(arr.symbol, arr.size)
+            line = "assign, {}, {}, 0".format(arr.symbol, arr.size)
             instructions = parseLine(line) + instructions
         return instructions
 
