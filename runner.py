@@ -10,12 +10,10 @@ parser.add_argument('--output', type=str, default='out.s', help='output file')
 
 def main():
     args = parser.parse_args()
-    fname = args.input
-    program = MIPSProgram(inputTigerIRFile=fname)
-    for f in program.functions:
-        print("==== {}".format(f.name))
-        for i in f.instructions:
-            print(i)
+    inputFname = args.input
+    program = MIPSProgram(inputTigerIRFile=inputFname)
+    outputFname = args.output
+    program._writeToSFile(outputFname)
 
 if __name__ == "__main__":
     main()

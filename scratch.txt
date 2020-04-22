@@ -1,46 +1,26 @@
-main:
+==== main
 li $v0, 9
 la $a0, 8
 syscall
-move arr, $v0
-addi $x0, $zero, 0
-addi $x1, $zero, 1
-add a, $x0, $x1
-addi $x0, $zero, 0
-addi $x1, $zero, 1
-add b, $x0, $x1
-sw a, 0(arr)
-sw b, 4(arr)
+move $t2, $v0
+addi $t0, $zero, 0
+addi $t1, $zero, 1
+add $t3, $t0, $t1
+addi $t0, $zero, 0
+addi $t1, $zero, 1
+add $t4, $t0, $t1
+sw $t3, 0($t2)
+sw $t4, 4($t2)
 addi $sp, $sp, -4
-sw arr, 0($sp)
+sw $t2, 0($sp)
 addi $sp, $sp, -4
-addi $x0, $zero, 2
-sw $x0, 0($sp)
+addi $t0, $zero, 2
+sw $t0, 0($sp)
 addi $sp, $sp, -4
 jal arrSum
-lw r, 0($sp)
+lw $t5, 0($sp)
 addi $sp, $sp, 4
 addi $sp, $sp, 8
-
-addi $sp, $sp, 4
-lw $ra, 0($sp)
-addi $sp, $sp, 4
-lw $s7, 0($sp)
-addi $sp, $sp, 4
-lw $s6, 0($sp)
-addi $sp, $sp, 4
-lw $s5, 0($sp)
-addi $sp, $sp, 4
-lw $s4, 0($sp)
-addi $sp, $sp, 4
-lw $s3, 0($sp)
-addi $sp, $sp, 4
-lw $s2, 0($sp)
-addi $sp, $sp, 4
-lw $s1, 0($sp)
-addi $sp, $sp, 4
-lw $s0, 0($sp)
-addi $sp, $sp, 4
 ==== arrSum
 arrSum:
 addi $sp, $sp, -4
@@ -62,12 +42,12 @@ sw $s7, 0($sp)
 addi $sp, $sp, -4
 sw $ra, 0($sp)
 addi $sp, $sp, -4
-lw arr, 48($sp)
-lw x, 44($sp)
-lw a, 0(arr)
-lw b, 0(arr)
-add c, a, b
-add c, c, x
+lw $t1, 48($sp)
+lw $t0, 44($sp)
+lw $t2, 0($t1)
+lw $t3, 0($t1)
+add $t4, $t2, $t3
+add $t4, $t4, $t0
 addi $sp, $sp, 4
 lw $ra, 0($sp)
 addi $sp, $sp, 4
@@ -87,5 +67,5 @@ lw $s1, 0($sp)
 addi $sp, $sp, 4
 lw $s0, 0($sp)
 addi $sp, $sp, 4
-sw c, 0($sp)
+sw $t4, 0($sp)
 jr $ra

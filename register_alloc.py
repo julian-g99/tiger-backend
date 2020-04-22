@@ -24,6 +24,7 @@ USEALLREGS = [
     'multu',
     'sw',
     'sb',
+    'move',
     ]
 
 class MIPSAllocator:
@@ -55,8 +56,9 @@ class MIPSAllocator:
                     if regex:
                         if (type(target) != re.Pattern):
                             raise TypeError("target must be a compiled pattern. Use re.compile()")
-                        if re.match(target, r) != None:
-                            regs.append(r)
+                        if re.fullmatch(target, r) != None:
+                            if r not in regs:
+                                regs.append(r)
                     else:
                         if (r[:len(target)] == target) & (r not in regs):
                             regs.append(r)
@@ -92,17 +94,18 @@ class MIPSAllocator:
                 return instruction.imm
         return 0
     
-    # checks if an instruction (addi only) modifies the value of the stack pointer and tracks it accordingly
-    def _checkForModifiedSP(self, instruction):
-        if type(instruction) != MCInstruction:
-            raise Exception("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
-        if (instruction.regs != None) and (instruction.regs[0] == SPREG):
-            if instruction.op == 'addi':
-                if (len(instruction.regs) == 0) | (instruction.imm is None):
-                    raise ValueError("Instruction is improperly formatted: {}".format(str(instruction)))
-                self.regStackOffset += instruction.imm
-            else:
-                raise ValueError('Instruction {} modifies stack pointer incorrectly'.format(instruction))
+    # # checks if an instruction (addi only) modifies the value of the stack pointer and tracks it accordingly
+    # def _checkForModifiedSP(self, instruction):
+    #     if type(instruction) != MCInstruction:
+    #         raise Exception("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
+    #     if (instruction.regs != None) and (instruction.regs[0] == SPREG):
+    #         if instruction.op == 'addi':
+    #             if (len(instruction.regs) == 0) | (instruction.imm is None):
+    #                 raise ValueError("Instruction is improperly formatted: {}".format(str(instruction)))
+    #             return instruction.imm
+    #         else:
+    #             raise ValueError('Instruction {} modifies stack pointer incorrectly'.format(instruction))
+    #     return 0
     
 class GreedyMIPSAllocator(MIPSAllocator):
     def __init__(self, program):
@@ -142,13 +145,26 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.regMap = self._getRegMap(liveranges, auto_spill)
         return self.regMap
 
-    def allocProgram(self, target='$t', physical='$t', regex=False, auto_spill=None):
+    def allocInstructions(self, target='$t', physical='$t', regex=False, auto_spill=None):
         cfg = CFG(self.program)
         newBBs = []
         for bb in cfg.bbs:
             newBB = self._allocBlock(bb, target=target, physical='$t', regex=regex, auto_spill=auto_spill)
             newBBs.append(newBB)
-        return newBBs
+        return self._mergeBBs(newBBs)
+        
+    def _mergeBBs(self, BBs):
+        instructions = []
+        pps = []
+        for bb in BBs:
+            pps.append(bb.pp)
+        pps.sort()
+        for p in pps:
+            for bb in BBs:
+                if bb.pp == p:
+                    for instr in bb:
+                        instructions.append(instr)
+        return instructions 
 
     def _allocBlock(self, block, target='$t', physical='$t', regex=False, auto_spill=None):
         self._resetAllocParams()
@@ -160,9 +176,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
         self.sregs = self.regMap['spill']
         for sr in self.sregs:
             self._insertStackAlloc()
-        self.sregPointerOffset = 0
         for instruction in block:
-            self._checkForModifiedSP(instruction)
             sregMap = self._getSregMap(instruction)
             for sr in sregMap.keys():
                 self._insertPregStore(sregMap[sr])
@@ -171,23 +185,28 @@ class GreedyMIPSAllocator(MIPSAllocator):
             for sr in sregMap.keys():
                 self._insertSregStore(sr, sregMap[sr])
                 self._insertPregLoad(sregMap[sr])
+        self._insertStackReset()
         return self.newBlock
 
     # inserts 2 instructions to allocate empty space on the stack for spilled registers
     def _insertStackAlloc(self):
         self.newBlock.addInstruction(MCInstruction('addi', regs=[SPREG, SPREG], imm=-4))
         self.newBlock.addInstruction(MCInstruction('sw', regs=[ZREG, SPREG], offset=0))
+
+    def _insertStackReset(self):
+        imm = len(self.sregs) * 4
+        self.newBlock.addInstruction(MCInstruction('addi', regs=[SPREG, SPREG], imm=imm))
     
     # inserts instruction for loading the value of a spilled reg into a given phyiscal reg
     def _insertSregLoad(self, sr, preg):
-        offset = self._getStackOffset(sr)
+        offset = self._getStackOffset(sr) + 4 # The extra word is because we know a preg value was just pushed onto the stack
         self.newBlock.addInstruction(MCInstruction('lw', regs=[preg, SPREG], offset=offset))
     
     # inserts instruction for storing the value of a physical reg onto the area of the stack for a given spilled reg
     def _insertSregStore(self, sr, preg):
         if type(preg) != str:
             raise TypeError("preg must be of type str. Got {}".format(type(preg)))
-        offset = self._getStackOffset(sr)
+        offset = self._getStackOffset(sr) + 4 # The extra word is because we know a preg value was just pushed onto the stack
         self.newBlock.addInstruction(MCInstruction('sw', regs=[preg, SPREG], offset=offset))
     
     # pops a value off the stack and loads it into the given physical reg
@@ -204,7 +223,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
 
     # computes the offset of the stack location containing the value of a given spilled reg for load and store instructions
     def _getStackOffset(self, sr):
-        return self.sregs.index(sr) * 4 + self.sregPointerOffset
+        return self.sregs.index(sr) * 4
 
     # inserts an instruction with its virtual registers replaced with phyical ones
     def _insertMappedInstruction(self, instruction, sregMap):
@@ -238,6 +257,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
                     if pr not in mapped:
                         sregMap[reg] = pr
                         mapped.append(pr)
+                        break
         return sregMap
     
     # computes a legal mapping of virtual regs to physical ones for the entire program, spilling some regs if necessary
@@ -350,7 +370,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
         function.set_reg_maps({0: regMap})
         function.set_bbs({0: BB(0, instructions=function.body)})
 
-    def allocProgram(self, target='$t', physical='$t', regex=False):
+    def allocMIPSFunction(self, target='$t', physical='$t', regex=False):
         self._resetAllocParams()
         self.vregs = self._getVirtualRegs(target, regex=regex)
         self.pregs = self._getPhysicalRegs(physical)
@@ -358,7 +378,7 @@ class NaiveMIPSAllocator(MIPSAllocator):
             self._insertStackAlloc()
         self.sregPointerOffset = 0
         for instruction in self.program:
-            self._checkForModifiedSP(instruction)
+            self.sregPointerOffset += self._checkForModifiedSP(instruction)
             regMap = self._getRegMap(instruction)
             for vr in regMap.keys():
                 self._insertVregLoad(vr, regMap[vr])

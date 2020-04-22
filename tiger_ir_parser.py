@@ -76,7 +76,7 @@ def parseLine(line):
     elif op in branch_ops:
         return _parseBranch(tokens)
     elif op in return_ops:
-        return [line] # parse after callin convention
+        return _parseReturn(tokens) # parse after callin convention
     elif op in call_ops:
         return _parseCall(tokens)
     elif op in callr_ops:
@@ -106,7 +106,7 @@ def _parseBinary(tokens):
     imms = []
     for t in tokens[1:]:
         if _isVar(t):
-            regs.append(t)
+            regs.append('@' + t)
         elif _isImm(t):
             imms.append(t)
         else:
@@ -116,10 +116,10 @@ def _parseBinary(tokens):
     if len(imms) == 2:
         # special case of double imms
         op = opcodeParseTable[tokens[0]]
-        regs += ['$x0', '$x1']
+        regs += ['@x0', '@x1']
         return [
-            MCInstruction('addi', regs=['$x0', '$zero'], imm=imms[0]),
-            MCInstruction('addi', regs=['$x1', '$zero'], imm=imms[1]),
+            MCInstruction('addi', regs=['@x0', '$zero'], imm=imms[0]),
+            MCInstruction('addi', regs=['@x1', '$zero'], imm=imms[1]),
             MCInstruction(op, regs=regs)
         ]
     else:
@@ -143,7 +143,7 @@ def _parseAssign(tokens):
     imm = None
     for t in tokens[1:]:
         if _isVar(t):
-            regs.append(t)
+            regs.append('@' + t)
         elif _isImm(t):
             imm = t
         else:
@@ -158,7 +158,7 @@ def _parseAssign(tokens):
     
 
 def _parseArrayAssign(tokens):
-    name = tokens[1]
+    name = '@' + tokens[1]
     size = int(tokens[2]) * 4
     return [
         MCInstruction('li', regs=['$v0'], imm=9),
@@ -179,7 +179,7 @@ def _parseBranch(tokens):
     imm = None
     target = tokens[1]
     for t in tokens[2:]: # excludde the target by starting at 2
-        if _isVar(t):
+        if _isVar('@' + t):
             regs.append(t)
         elif _isImm(t):
             imm = t
@@ -197,22 +197,20 @@ def _parseBranch(tokens):
         instructions = []
         if (imm != None):
             op = 'subi'
-            regs = ['$x0'] + regs
+            regs = ['@x0'] + regs
             instructions.append(MCInstruction(op, regs=regs, imm=imm))
         else:
-            regs = ['$x0'] + regs
+            regs = ['@x0'] + regs
             instructions.append(MCInstruction('sub', regs=regs))
         op = opcodeParseTable[tokens[0]]
-        instructions.append(MCInstruction(op, regs=['$x0'], target=target))
+        instructions.append(MCInstruction(op, regs=['@x0'], target=target))
         return instructions
 
-def parseReturn(line):
-    tokens = line.split(",")
-    tokens = [t.strip(" ") for t in tokens]
+def _parseReturn(tokens):
     regs = None
     imm = None
     if _isVar(tokens[1]):
-        regs = [tokens[1]]
+        regs = ['@' + tokens[1]]
     elif _isImm(tokens[1]):
         imm = tokens[1]
     else:
@@ -220,13 +218,15 @@ def parseReturn(line):
     op = opcodeParseTable[tokens[0]]
     if imm != None:
         instructions = []
-        instructions.append(MCInstruction('addi', regs=['$x0', '$zero'], imm=imm))
-        instructions.append(MCInstruction('sw', regs=['$x0', '$sp'], offset=0))
+        instructions.append("--[INSERT CALLING CONVENTION]--"),
+        instructions.append(MCInstruction('addi', regs=['@x0', '$zero'], imm=imm))
+        instructions.append(MCInstruction('sw', regs=['@x0', '$sp'], offset=0))
         instructions.append(MCInstruction(op, regs=['$ra'])) # this assumes calling convention has loaded the value of $ra
         return instructions
     else:
         instructions = []
         regs.append('$sp')
+        instructions.append("--[INSERT CALLING CONVENTION]--"),
         instructions.append(MCInstruction('sw', regs=regs, offset=0))
         instructions.append(MCInstruction(op, regs=['$ra'])) # this assumes calling convention has loaded the value of $ra
         return instructions
@@ -235,10 +235,10 @@ def parseReturn(line):
 def _parseArrayStore(tokens):
     regs = None
     imm = None
-    arrayReg = tokens[2]
+    arrayReg = '@' + tokens[2]
     offset = int(tokens[3]) * 4
     if _isVar(tokens[1]):
-        regs = [tokens[1]]
+        regs = ['@' + tokens[1]]
     elif _isImm(tokens[1]):
         imm = tokens[1]
     else:
@@ -246,8 +246,8 @@ def _parseArrayStore(tokens):
     op = opcodeParseTable[tokens[0]]
     instructions = []
     if imm != None:   
-        instructions.append(MCInstruction('addi', regs=['$x0', '$zero'], imm=imm))
-        instructions.append(MCInstruction('sw', regs=['$x0', arrayReg], offset=offset))
+        instructions.append(MCInstruction('addi', regs=['@x0', '$zero'], imm=imm))
+        instructions.append(MCInstruction('sw', regs=['@x0', arrayReg], offset=offset))
         return instructions
     else:
         regs.append(arrayReg)
@@ -257,9 +257,9 @@ def _parseArrayStore(tokens):
 
 def _parseArrayLoad(tokens):
     regs = None
-    arrayReg = tokens[2]
+    arrayReg = '@' + tokens[2]
     offset = int(tokens[3]) * 4
-    regs = tokens[1:3]
+    regs = ['@' + t for t in tokens[1:3]]
     return [MCInstruction('lw', regs=regs, offset=offset)]
 
 
@@ -272,7 +272,7 @@ def _parseCall(tokens):
     for t in tokens[2:]: # start at first arg
         instructions += _getStackAlloc(1)
         if _isVar(t):
-            instructions += _getRegStore(t)
+            instructions += _getRegStore('@' + t)
         elif _isImm(t):
             instructions += _getImmStore(t)
         else:
@@ -287,14 +287,14 @@ def _parseCall(tokens):
 # includes some calling convention
 def _parseCallr(tokens):
     op = opcodeParseTable[tokens[0]]
-    returnReg = tokens[1]
+    returnReg = '@' + tokens[1]
     funcName = tokens[2]
     instructions = []
     # save args
     for t in tokens[3:]: # start at first arg
         instructions += _getStackAlloc(1)
         if _isVar(t):
-            instructions += _getRegStore(t)
+            instructions += _getRegStore('@' + t)
         elif _isImm(t):
             instructions += _getImmStore(t)
         else:
@@ -318,8 +318,8 @@ def _getStackAlloc(amount):
 
 def _getImmStore(imm):
     return [
-        MCInstruction('addi', regs=['$x0', '$zero'], imm=imm),
-        MCInstruction('sw', regs=['$x0', '$sp'], offset=0)
+        MCInstruction('addi', regs=['@x0', '$zero'], imm=imm),
+        MCInstruction('sw', regs=['@x0', '$sp'], offset=0)
     ]
 
 
@@ -337,12 +337,12 @@ def _getStackPop(amount):
 
 
 def _getImmInstrs(token0, imm=None, regs=None, target=None):
-    immSeedInstr = MCInstruction('addi', regs=['$x0', '$zero'], imm=imm)
+    immSeedInstr = MCInstruction('addi', regs=['@x0', '$zero'], imm=imm)
     op = opcodeParseTable[token0]
     if regs != None:
-        regs.append('$x0')
+        regs.append('@x0')
     else:
-        regs = ['$x0']
+        regs = ['@x0']
     baseInstr = MCInstruction(op, regs=regs, target=target)
     return [immSeedInstr, baseInstr]
 

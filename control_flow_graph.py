@@ -1,7 +1,6 @@
 from mc_instruction import MCInstruction
 
 TERMINATORS = ['label', 'beq', 'bgez', 'bgtz', 'blez', 'bltz', 'bne', 'j']
-LINKERS = ['bgezal', 'bltzal', 'jal']
 
 class BB:
     def __init__(self, pp, instructions=None):
@@ -63,11 +62,6 @@ class CFG:
                 raise TypeError("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
             if instruction.op == 'jr':
                 # terminate at jr instruction. There is no way to find the target of a jr instruction without simulating a MIPS cpu
-                bb.addInstruction(instruction)
-                self.bbs.append(bb)
-                return
-            if instruction.op in LINKERS:
-                # linking instructions exit the scope of the CFG
                 bb.addInstruction(instruction)
                 self.bbs.append(bb)
                 return
