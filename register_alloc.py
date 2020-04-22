@@ -55,7 +55,7 @@ class MIPSAllocator:
                     if regex:
                         if (type(target) != re.Pattern):
                             raise TypeError("target must be a compiled pattern. Use re.compile()")
-                        if re.match(target, r) != None:
+                        if re.match(target, r) is None:
                             regs.append(r)
                     else:
                         if (r[:len(target)] == target) & (r not in regs):
@@ -345,7 +345,8 @@ class NaiveMIPSAllocator(MIPSAllocator):
         regMap = {}
         regMap['spill'] = self.vregs
         if auto_spill_arrs:
-            regMap['spill'] += function.int_arrs
+            arr_names = [t[0] for t in function.int_arrs]
+            regMap['spill'] += arr_names
         regMap = self._reformatRegMapSpillField(regMap)
         function.set_reg_maps({0: regMap})
         function.set_bbs({0: BB(0, instructions=function.body)})

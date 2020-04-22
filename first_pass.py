@@ -76,35 +76,32 @@ def convert_arithmetic(instr: IRInstruction) -> str:
     if instr.instruction_type == "mult":
         # FIXME: currently assumes the result will be 32 bit
         if not is_constant(src0) and not is_constant(src1):
-            # neither is constant
-            # output = "mult %s, %s\n" % (src0, src1)
-            output.append(MCInstruction("mult", regs=[src0, src1]))
+            output.append(MCInstruction("mul", regs=[dest, src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src1))
-            output.append(MCInstruction("mult", regs=[src0, dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src1))
+            output.append(MCInstruction("mul", regs=[dest, src0, dest]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src0))
-            output.append(MCInstruction("mult", regs=[src1, dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src0))
+            output.append(MCInstruction("mult", regs=[dest, dest, src1]))
         else:
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src0))
-            output.append(MCInstruction("addi", regs=[s_map["multiply_temporary_register"], "$0"], imm=src1))
-            output.append(MCInstruction("mult", regs=[dest, s_map["multiply_temporary_register"]]))
-        output.append(MCInstruction("mflo", regs=[dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src0))
+            output.append(MCInstruction("li", regs=[s_map["multiply_temporary_register"]], imm=src1))
+            output.append(MCInstruction("mult", regs=[dest, dest, s_map["multiply_temporary_register"]]))
     if instr.instruction_type == "div":
         # FIXME: currently only keeps the integer quotient
         if not is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("div", regs=[src0, src1]))
+            output.append(MCInstruction("div", regs=[dest, src0, src1]))
         elif not is_constant(src0) and is_constant(src1):
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src1))
-            output.append(MCInstruction("div", regs=[src1, dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src1))
+            output.append(MCInstruction("div", regs=[dest, src0, dest]))
         elif is_constant(src0) and not is_constant(src1):
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src0))
-            output.append(MCInstruction("div", regs=[src1, dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src0))
+            output.append(MCInstruction("div", regs=[dest, dest, src1]))
         else:
-            output.append(MCInstruction("addi", regs=[dest, "$0"], imm=src0))
-            output.append(MCInstruction("addi", regs=[s_map["division_temporary_register"], "$0"], imm=src1))
-            output.append(MCInstruction("div", regs=[dest, s_map["division_temporary_register"]]))
-        output.append(MCInstruction("mflo", regs=[dest]))
+            output.append(MCInstruction("li", regs=[dest], imm=src0))
+            output.append(MCInstruction("li", regs=[s_map["division_temporary_register"]], imm=src1))
+            output.append(MCInstruction("div", regs=[dest, dest, s_map["division_temporary_register"]]))
+        # output.append(MCInstruction("mflo", regs=[dest]))
     if instr.instruction_type in ["and", "or"]:
         i_type = instr.instruction_type
         if not is_constant(src0) and not is_constant(src1):
@@ -131,10 +128,10 @@ def convert_assignment(instr: IRInstruction) -> str:
 
     return output
 
-def convert_branch(instr: IRInstruction) -> str:
+def convert_branch(instr: IRInstruction, func) -> str:
     if instr.instruction_type == "goto":
         target = instr.argument_list[0]
-        return [MCInstruction("j", target=target)]
+        return [MCInstruction("j", target="%s_%s" % (func, target))]
     else:
         branch_map = {"breq": "beq", "brneq": "bne",
                       "brlt": "blt", "brgt": "bgt",
@@ -142,7 +139,21 @@ def convert_branch(instr: IRInstruction) -> str:
         label, src0, src1 = instr.argument_list
         op = branch_map[instr.instruction_type]
 
-        return [MCInstruction(op, regs=[src0, src1], target=label)]
+        output = []
+        temp = s_map["CONVERT_BRANCH_TEMP_REG"]
+        if not is_constant(src0) and not is_constant(src1):
+            output.append(MCInstruction(op, regs=[src0, src1], target="%s_%s" % (func, label)))
+        elif not is_constant(src0) and is_constant(src1):
+            output.append(MCInstruction("li", regs=[temp], imm=src1))
+            output.append(MCInstruction(op, regs=[src0, temp], target="%s_%s" % (func, label)))
+        elif is_constant(src0) and not is_constant(src1):
+            output.append(MCInstruction("li", regs=[temp], imm=src0))
+            output.append(MCInstruction(op, regs=[temp, src1], target="%s_%s" % (func, label)))
+        else:
+            raise ValueError("Both operands of branch instruction are constants")
+        del s_map["CONVERT_BRANCH_TEMP_REG"]
+
+        return output
 
 def convert_array_load_store(instr):
     # TODO: implement
@@ -180,7 +191,7 @@ def convert_array_load_store(instr):
     return output
 
 
-def convert_array_assign(instr):
+def convert_array_assign(instr, func):
     # TODO: implement
     assert(instr.instruction_type == "array_assign")
     assert(len(instr.argument_list) == 3)
@@ -197,39 +208,43 @@ def convert_array_assign(instr):
         output.append(MCInstruction("addi", regs=[temp1, temp0], imm=size))
         output.append(MCInstruction("li", regs=[temp2], imm=value))
 
-        output.append(MCInstruction("label", target="CONVERT_ARRAY_ASSIGN_LOOP"))
-        output.append(MCInstruction("bge",regs=[temp0, temp1], target="CONVERT_ARRAY_ASSIGN_END"))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("bge",regs=[temp0, temp1], target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
         output.append(MCInstruction("sw", regs=[temp2, temp0]))
         output.append(MCInstruction("addi", regs=[temp0, temp0], imm=4))
-        output.append(MCInstruction("j", target="CONVERT_ARRAY_ASSIGN_LOOP"))
+        output.append(MCInstruction("j", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
     elif is_constant(size) and not is_constant(value):
         output.append(MCInstruction("move", regs=[temp0, array]))
         output.append(MCInstruction("add", regs=[temp1, temp0, size]))
 
-        output.append(MCInstruction("label", target="CONVERT_ARRAY_ASSIGN_LOOP"))
-        output.append(MCInstruction("bge",regs=[temp0, temp1], target="CONVERT_ARRAY_ASSIGN_END"))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("bge",regs=[temp0, temp1], target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
         output.append(MCInstruction("sw", regs=[value, temp0]))
         output.append(MCInstruction("addi", regs=[temp0, temp0], imm=4))
-        output.append(MCInstruction("j", target="CONVERT_ARRAY_ASSIGN_LOOP"))
+        output.append(MCInstruction("j", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
     elif not is_constant(size) and is_constant(value):
         output.append(MCInstruction("move", regs=[temp0, array]))
         output.append(MCInstruction("add", regs=[temp1, temp0, size]))
         output.append(MCInstruction("li", regs=[temp2], imm=value))
 
-        output.append(MCInstruction("label", target="CONVERT_ARRAY_ASSIGN_LOOP"))
-        output.append(MCInstruction("bge",regs=[temp0, temp1], target="CONVERT_ARRAY_ASSIGN_END"))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("bge",regs=[temp0, temp1], target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
         output.append(MCInstruction("sw", regs=[temp2, temp0]))
         output.append(MCInstruction("addi", regs=[temp0, temp0], imm=4))
-        output.append(MCInstruction("j", target="CONVERT_ARRAY_ASSIGN_LOOP"))
+        output.append(MCInstruction("j", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
     else:
         output.append(MCInstruction("move", regs=[temp0, array]))
         output.append(MCInstruction("add", regs=[temp1, temp0, size]))
 
-        output.append(MCInstruction("label", target="CONVERT_ARRAY_ASSIGN_LOOP"))
-        output.append(MCInstruction("bge",regs=[temp0, temp1], target="CONVERT_ARRAY_ASSIGN_END"))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("bge",regs=[temp0, temp1], target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
         output.append(MCInstruction("sw", regs=[value, temp0]))
         output.append(MCInstruction("addi", regs=[temp0, temp0], imm=4))
-        output.append(MCInstruction("j", target="CONVERT_ARRAY_ASSIGN_LOOP"))
+        output.append(MCInstruction("j", target="%s_CONVERT_ARRAY_ASSIGN_LOOP" % func))
+        output.append(MCInstruction("label", target="%s_CONVERT_ARRAY_ASSIGN_END" % func))
 
     del s_map["array_assign_temp0"]
     del s_map["array_assign_temp1"]
@@ -237,9 +252,9 @@ def convert_array_assign(instr):
 
     return output
 
-def convert_label(instr: IRInstruction):
+def convert_label(instr: IRInstruction, func):
     assert(instr.instruction_type == "label")
-    return [MCInstruction("label", target=instr.argument_list[0])]
+    return [MCInstruction("label", target="%s_%s" % (func, instr.argument_list[0]))]
 
 def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruction]]:
     """
@@ -379,14 +394,18 @@ def convert_calls(instr: IRInstruction):
         return convert_intrinsic(instr, function_name, arguments, return_dest)
 
     output = []
+    save_arg = []
+    restore_arg = []
     # normal function call
     first_section = arguments[:4]
     for i, arg in enumerate(first_section):
         arg_reg = "$a%d" % i
+        save_arg.append(MCInstruction("save_arg", regs=[arg_reg]))
+        restore_arg.append(MCInstruction("restore_arg", regs=[arg_reg]))
         if is_constant(arg):
-            output.append(MCInstruction("li", regs=[arg_reg], imm=arg))
+            output.append(MCInstruction("li", regs=[arg_reg], imm=arg, is_call_move=True))
         else:
-            output.append(MCInstruction("move", regs=[arg_reg, arg]))
+            output.append(MCInstruction("move", regs=[arg_reg, arg], is_call_move=True))
 
     second_section = arguments[4:][:-1] # pushing in reverse order
     temp = s_map["CONVERT_CALLS_TEMP_REG"]
@@ -416,7 +435,7 @@ def convert_calls(instr: IRInstruction):
     if stack_length != 0:
         output.append(MCInstruction("addiu", regs=[sp, sp], imm=4*stack_length))
 
-    return output
+    return save_arg + output + restore_arg
 
 def convert_return(instr):
     assert(instr.instruction_type == "return")
@@ -431,25 +450,24 @@ def convert_return(instr):
 
     return output
 
-def instr_to_asm(instr: IRInstruction) -> List[IRInstruction]:
+def instr_to_asm(instr: IRInstruction, function_name=None) -> List[IRInstruction]:
     """
     Converts an IRInstruction object into assembly code string
     Curretnly uses only symbolic registers
     """
-
     if instr.is_arithmetic():
         assert(not is_constant(instr.argument_list[0])) # dest can't be constant
         return convert_arithmetic(instr)
     elif instr.instruction_type == "val_assign":
         return convert_assignment(instr)
     elif instr.is_branch:
-        return convert_branch(instr)
+        return convert_branch(instr, func=function_name)
     elif instr.instruction_type == "array_store" or instr.instruction_type == "array_load":
         return convert_array_load_store(instr)
     elif instr.instruction_type == "array_assign":
-        return convert_array_assign(instr)
+        return convert_array_assign(instr, func=function_name)
     elif instr.instruction_type == "label":
-        return convert_label(instr)
+        return convert_label(instr, func=function_name)
     elif instr.instruction_type in ["call", "callr"]:
         return convert_calls(instr)
     elif instr.instruction_type == "return":

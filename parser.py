@@ -29,7 +29,8 @@ def parse_instructions(fp):
             elif line.strip() == "" :
                 continue
             else:
-                opcode = line[len(line) - len(line.strip()) - 1 : line.find(',')]
+                # opcode = line[len(line) - len(line.strip()) - 1 : line.find(',')]
+                opcode = line[len(line) - len(line.lstrip()): line.find(",")]
                 arg_list = get_arguments(line)
                 instructions.append(IRInstruction(line_num, opcode, arg_list))
             line_num += 1

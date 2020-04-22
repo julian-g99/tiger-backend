@@ -86,4 +86,7 @@ class MCFunction:
         for _, reg_map in reg_maps.items():
             for virt, phys in reg_map.items():
                 int_vals.add(virt)
-        return list(int_vals)
+
+        int_vals = list(int_vals)
+        int_vals.sort()
+        return int_vals

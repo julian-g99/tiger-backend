@@ -30,7 +30,7 @@ def needs_pad(function: MCFunction) -> bool:
     if function.name != "main":
         total = fp + ra + arr_length + num_vars + 8 + len(function.saved_regs)
     else:
-        total = fp + arr_length + num_vars
+        total = fp + arr_length + num_vars + 8 + len(function.saved_regs)
 
     return total % 2 == 1
 
@@ -73,9 +73,6 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     sp = "$sp"
     fp = "$fp"
 
-    # remove later
-    if function.name == "main":
-        prologue.append(MCInstruction("li", regs=["$t0"], imm=0))
     # prologue
 
     # make space for fp and save
@@ -83,8 +80,15 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     prologue.append(MCInstruction("sw", regs=[fp, sp], offset=0))
     prologue.append(MCInstruction("move", regs=[fp, sp]))
 
-    # make space for arrays
     curr_offset = -4
+    # make space for arg registers
+    for i in range(4):
+        arg_reg = "$a%d" % i
+        # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        offsets[arg_reg] = curr_offset
+        curr_offset -= 4
+
+    # make space for arrays
     arr_names = []
     for arr in function.int_arrs:
         arr_names.append(arr[0])
@@ -96,58 +100,61 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     # for greedy local alloc, need to save everything (even non-spilled)
     for val in function.int_vals:
         if val not in arr_names:
-            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+            # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
             offsets[val] = curr_offset
             curr_offset -= 4
 
     # save all the t registers (as specified in the pdf)
     for i in range(8):
         t_reg = "$t%d" % i
-        if function.name != "main":
-            prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-            prologue.append(MCInstruction("sw", regs=[t_reg, sp], imm=0))
-            offsets[t_reg] = curr_offset
-            curr_offset -= 4
-        else:
-            prologue.append(MCInstruction("li", regs=[t_reg], imm=0))
+        # if function.name != "main":
+        # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        # prologue.append(MCInstruction("sw", regs=[t_reg, sp], imm=0))
+        prologue.append(MCInstruction("sw", regs=[t_reg, fp], offset=curr_offset))
+        offsets[t_reg] = curr_offset
+        curr_offset -= 4
+        # else:
+            # prologue.append(MCInstruction("li", regs=[t_reg], imm=0))
 
     # padding
     if needs_pad(function):
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
         curr_offset -= 4
 
     if function.name != "main":
         # return address
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-        prologue.append(MCInstruction("sw", regs=["$ra", sp], offset=0))
+        # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        prologue.append(MCInstruction("sw", regs=["$ra", fp], offset=curr_offset))
         offsets["$ra"] = curr_offset
         curr_offset -= 4
 
     # s registers
     for s in function.saved_regs:
-        prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-        prologue.append(MCInstruction("sw", regs=[s, sp], offset=0))
+        # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
+        prologue.append(MCInstruction("sw", regs=[s, fp], offset=curr_offset))
         offsets[s] = curr_offset
         curr_offset -= 4
 
+    # now, finally move the sp
+    prologue.append(MCInstruction("addiu", regs=[sp, fp], imm=curr_offset+4))
 
     # epilogue
     epilogue = []
 
     # restore the s registers
     # for s in function.saved_regs[::-1]:
-    if function.name != "main":
-        for s in function.saved_regs:
-            epilogue.append(MCInstruction("lw", regs=[s, fp], offset=offsets[s]))
+    for s in function.saved_regs:
+        epilogue.append(MCInstruction("lw", regs=[s, fp], offset=offsets[s]))
 
+    if function.name != "main":
         # restore the return address
-        epilogue.append(MCInstruction("lw", regs=["$ra", sp], offset=offsets["$ra"]))
+        epilogue.append(MCInstruction("lw", regs=["$ra", fp], offset=offsets["$ra"]))
         # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
-        # restore t registers
-        for i in range(8):
-            t_reg = "$t%d" % i
-            epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
+    # restore t registers
+    for i in range(8):
+        t_reg = "$t%d" % i
+        epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
 
     # restore the fp
     epilogue.append(MCInstruction("move", regs=[sp, fp])) # moving sp back to fp
@@ -155,6 +162,38 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
     return prologue, epilogue, offsets
+
+def instr_uses(instr: MCInstruction) -> List[str]:
+    if instr.regs is None or instr.regs == []:
+        return []
+    # only assign for now
+    triples = ["add", "addi", "addu", "addiu",
+               "sub", "subu",
+               "div", "mul",
+               "and", "andi",
+               "or", "ori"]
+
+    doubles = ["move", "li"]
+
+    mems = ["sw", "lw"]
+
+    branches = ["beq", "bne", "blt", "bgt", "bge", "ble"]
+
+    jumps = ["j", "jr"]
+
+
+    if instr.op in triples:
+        return instr.regs[1:]
+    elif instr.op in doubles:
+        return instr.regs[1:]
+    elif instr.op in mems:
+        return instr.regs
+    elif instr.op in branches:
+        return instr.regs
+    elif instr.op in jumps:
+        return instr.regs
+    else:
+        raise ValueError("unexpected instruction for instr_uses()")
 
 
 def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
@@ -173,8 +212,8 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
         new_args: the physical registers of the instruction
     """
     # NOTE: it's assumed that the position at $fp will be used for saving the register used here
-    save = []
-    restore = []
+    prologue = []
+    epilogue = []
     new_args = []
 
     curr_temp = 0
@@ -186,14 +225,28 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
             physical = reg_map[virtual]
             if physical == "spill":
                 temp_reg = "$t%d" % curr_temp
-                save.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
-                restore.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+                temp_needs_save = temp_reg in reg_map.values()
+                virt_needs_load = virtual in instr_uses(instr)
+
+                # print("instr is: {}\t reg is: {}\t needs_load: {}".format(instr, virtual, virt_needs_load))
+
+                if temp_needs_save:
+                    prologue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+
+                if virt_needs_load:
+                    prologue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+
+                epilogue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+
+                if temp_needs_save:
+                    epilogue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+
                 new_args.append(temp_reg)
                 curr_temp += 1
             else:
                 new_args.append(physical)
 
-    return save, restore, new_args
+    return prologue, epilogue, new_args
 
 def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruction]]:
     """
@@ -215,7 +268,6 @@ def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruc
 
     return save_code, restore_code
 
-#NOTE: this function is not fully implemented
 def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
     """
     Convert a single instruction from using virtual register to physical register. Also, if this instruction is `call` or `callr`, then it's also changed to an actual machine instruction.
@@ -226,29 +278,47 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
     Return:
         - a list of instruction that's equivalent
     """
+    fp = "$fp"
+    if instr.op == "save_arg":
+        reg = instr.regs[0]
+        return [MCInstruction("sw", regs=[reg, fp], offset=offsets[reg])]
+    if instr.op == "restore_arg":
+        reg = instr.regs[0]
+        return [MCInstruction("lw", regs=[reg, fp], offset=offsets[reg])]
+
     # TODO: assume the caller's stack is already even, add padding if the number of args that need to be passed through the stack is odd
     output = []
     # physical_regs = [reg_map[virtual_reg] for virtual_reg in instr.regs]
     curr_temp = 0
     if instr.regs is None:
         return [instr]
+    prologue = []
+    epilogue = []
+    # if instr.is_call_move:
+        # arg_reg = instr.regs[0] # so far it's always the first reg
+        # prologue.append(MCInstruction("sw", regs=[arg_reg, fp], offset=offsets[arg_reg]))
+        # epilogue.append(MCInstruction("lw", regs=[arg_reg, fp], offset=offsets[arg_reg]))
     save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
+
+    output += prologue
     output += save
     instr.regs = new_regs
     # print(instr)
     output.append(instr)
     output += restore
+    output += epilogue
 
     return output
-
 
 def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tuple[List[MCInstruction], List[MCInstruction]]:
     load = []
     save = []
     fp = "$fp"
 
+    arg_pattern = re.compile(r"\$a[0123]")
+
     for virt, phys in reg_map.items():
-        if phys != "spill":
+        if phys != "spill" and arg_pattern.match(phys) is None:
             offset = offsets[virt]
             load.append(MCInstruction("lw", regs=[phys, fp], offset=offset))
             save.append(MCInstruction("sw", regs=[phys, fp], offset=offset))
@@ -267,7 +337,9 @@ def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInst
     assert(function.bbs.keys() == function.reg_maps.keys())
 
     output = []
-    for k in function.bbs.keys():
+    sorted_keys = list(function.bbs.keys())
+    sorted_keys.sort()
+    for k in sorted_keys:
         bb = function.bbs[k]
         reg_map = function.reg_maps[k]
         load, save = load_and_save_locals(reg_map, offsets)
@@ -278,7 +350,17 @@ def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInst
 
     return output
 
-def parse_function(function: MCFunction) -> List[MCInstruction]:
+def return_function(function: MCFunction) -> [List[MCInstruction]]:
+    output = []
+    syscode = 10
+    if function.name == "main":
+        output.append(MCInstruction("li", regs=["$v0"], imm=syscode))
+        output.append(MCInstruction("syscall"))
+    else:
+        output.append(MCInstruction("jr", regs=["$ra"]))
+    return output
+
+def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCInstruction], List[MCInstruction], List[MCInstruction]]:
     """
     Parses an MCFunction to a list of machine instructions. This should be the final product that can be outputted to a file.
     Args:
@@ -297,16 +379,19 @@ def parse_function(function: MCFunction) -> List[MCInstruction]:
 
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
+    # print(offsets)
     curr_offset = 4
     for arg in function.args[4:]:
         offsets[arg] = curr_offset 
         curr_offset += 4
+
     sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
     #NOTE: if the return value above is None that means it's a simple leaf
     translated_body = translate_body(function, offsets)
 
-    res = prologue + translated_body + epilogue
-    return res
+    rtn = return_function(function)
+
+    return prologue, translated_body, epilogue, rtn
 
 def test():
     i = 0 # using this as nop

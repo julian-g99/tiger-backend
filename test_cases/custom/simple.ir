@@ -1,21 +1,9 @@
 #start_function
 void main():
-int-list: a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13
+int-list: a, b, c
 float-list:
-    assign, a0, 0
-    assign, a1, 0
-    assign, a2, 0
-    assign, a3, 0
-    assign, a4, 0
-    assign, a5, 0
-    assign, a6, 0
-    assign, a7, 0
-    assign, a8, 0
-    assign, a9, 0
-    assign, a10, 0
-    assign, a11, 0
-    assign, a12, 0
-    assign, a13, 0
-
-    mult, a0, a1, a2
+    assign, a, 10
+    assign, b, 20
+    div, c, b, a
+    call, puti, c
 #end_function

@@ -21,10 +21,13 @@ def main():
     functions = find_functions(instructions)
     mc_functions = []
     for func in functions:
+        # print(func.name + ":")
         translated = []
         for i in func.body():
-            mc_instr = instr_to_asm(i)
+            mc_instr = instr_to_asm(i, function_name=func.name)
             translated += mc_instr
+        # for i in translated:
+            # print("\t%s" % i)
         mc_functions.append(MCFunction(name=func.name, args=func.args, int_arrs=func.int_arrs, instrs=translated))
 
     if args.allocator == 'greedy':
@@ -33,14 +36,27 @@ def main():
         allocator = NaiveMIPSAllocator([])
 
     for function in mc_functions:
-        pattern = re.compile(r"(?!\$)")
+        pattern = re.compile(r"\$[stav]\d|zero|\d+")
         allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
 
     # Continue selecting from here
+    print(".text")
     for function in mc_functions:
         print(function.name + ":")
-        res = parse_function(function)
-        for i in res:
+        prologue, translated_body, epilogue, rtn = parse_function(function)
+        for i in prologue:
+            print("\t%s" % i)
+        print()
+
+        for i in translated_body:
+            print("\t%s" % i)
+        print()
+
+        for i in epilogue:
+            print("\t%s" % i)
+        print()
+
+        for i in rtn:
             print("\t%s" % i)
 
 

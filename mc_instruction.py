@@ -3,12 +3,13 @@ branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
 class MCInstruction:
     def __init__(self, op, regs=None, imm=None, offset=None, target=None,
-                 function_name=None, arguments=None, return_dest=None):
+                 function_name=None, arguments=None, return_dest=None, is_call_move=False):
         self.op = self._formatOp(op)
         self.regs = self._formatRegs(regs)
         self.imm = imm
         self.offset = offset
         self.target = target
+        self.is_call_move = is_call_move
 
     def __str__(self):
         # NOTE: call and callr should never remain in the final output, so their string representation is mostly for debugging

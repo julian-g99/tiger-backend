@@ -1,0 +1,39 @@
+fib:
+	li t0, 0
+	li r, 1
+	move rr, r
+	bgt n, 1, if_label0
+	li t00, 0
+	move r, n
+	move rr, r
+	j end
+	if_label0:
+	addi n, n, -1
+	move $a0, n
+	jal fib
+	move t1, $v0
+	addi x, n, -1
+	addi n, n, -1
+	move $a0, x
+	jal fib
+	move t2, $v0
+	move t00, t0
+	move r, t0
+	add r, t1, t2
+	move rr, r
+	end:
+	move $v0, rr
+main:
+	li $v0, 5
+	syscall
+	move x, $v0
+	move $a0, x
+	jal fib
+	move z, $v0
+	move x, z
+	move $a0, x
+	li $v0, 1
+	syscall
+	li $a0, 10
+	li $v0, 11
+	syscall
