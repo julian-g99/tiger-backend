@@ -75,9 +75,9 @@ def parseLine(line):
     elif op in return_ops:
         return _parseReturn(tokens)
     elif op in call_ops:
-        return line
+        return [line] # calling convention will handle this
     elif op in callr_ops:
-        return line
+        return [line] # calling convention will handle this
     elif op in array_store_ops:
         return _parseArrayStore(tokens)
     elif op in array_load_ops:

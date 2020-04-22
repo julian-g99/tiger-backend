@@ -25,7 +25,6 @@ class MIPSProgram():
             # loop until first function delim
             while i < len(lines):
                 line = self._stripLine(lines[i])
-                print(line)
                 if line == '#start_function':
                     function = []
                     # add lines to function until next function delim
