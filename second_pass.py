@@ -28,16 +28,16 @@ def needs_pad(function: MCFunction) -> bool:
     num_vars = function.num_vars
     # total = fp + arr_length + spill_count + ra + saved_count
     if function.name != "main":
-        total = fp + ra + arr_length + num_vars + 8 + len(function.saved_regs)
+        total = fp + ra + arr_length + num_vars + 10 + len(function.saved_regs)
     else:
-        total = fp + arr_length + num_vars + 8 + len(function.saved_regs)
+        total = fp + arr_length + num_vars + 10 + len(function.saved_regs)
 
     return total % 2 == 1
 
-def alloc_array(name: str, size: int) -> List[MCInstruction]:
+def alloc_array(name: str, size: int, offset: int) -> List[MCInstruction]:
     syscode = 9
     output = []
-    sp = "$sp"
+    fp = "$fp"
 
     # syscall
     output.append(MCInstruction("li", regs=["$v0"], imm=syscode))
@@ -45,8 +45,7 @@ def alloc_array(name: str, size: int) -> List[MCInstruction]:
     output.append(MCInstruction("syscall"))
 
     # store pointer on the stack
-    output.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
-    output.append(MCInstruction("sw", regs=["$v0", sp], imm=0))
+    output.append(MCInstruction("sw", regs=["$v0", fp], offset=offset))
 
     return output
 
@@ -92,7 +91,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
     arr_names = []
     for arr in function.int_arrs:
         arr_names.append(arr[0])
-        prologue += alloc_array(arr[0], arr[1])
+        prologue += alloc_array(arr[0], arr[1], curr_offset)
         offsets[arr[0]] = curr_offset
         curr_offset -= 4
 
@@ -105,7 +104,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
             curr_offset -= 4
 
     # save all the t registers (as specified in the pdf)
-    for i in range(8):
+    for i in range(10):
         t_reg = "$t%d" % i
         # if function.name != "main":
         # prologue.append(MCInstruction("addiu", regs=[sp, sp], imm=-4))
@@ -152,7 +151,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         # epilogue.append(MCInstruction("addiu", regs=[sp, sp], imm=4))
 
     # restore t registers
-    for i in range(8):
+    for i in range(10):
         t_reg = "$t%d" % i
         epilogue.append(MCInstruction("lw", regs=[t_reg, fp], offset=offsets[t_reg]))
 
@@ -171,13 +170,14 @@ def instr_uses(instr: MCInstruction) -> List[str]:
                "sub", "subu",
                "div", "mul",
                "and", "andi",
-               "or", "ori"]
+               "or", "ori",
+               "sll"]
 
     doubles = ["move", "li"]
 
     mems = ["sw", "lw"]
 
-    branches = ["beq", "bne", "blt", "bgt", "bge", "ble"]
+    branches = ["beq", "bne", "blt", "bgt", "bge", "ble", "blez"]
 
     jumps = ["j", "jr"]
 
@@ -218,33 +218,40 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
 
     curr_temp = 0
     # for phys, ir in zip(phys_reg, ir_regs):
+    new_map = {}
     for virtual in instr.regs:
-        if virtual[0] == "$":
-            new_args.append(virtual)
-        else:
-            physical = reg_map[virtual]
-            if physical == "spill":
-                temp_reg = "$t%d" % curr_temp
-                temp_needs_save = temp_reg in reg_map.values()
-                virt_needs_load = virtual in instr_uses(instr)
-
-                # print("instr is: {}\t reg is: {}\t needs_load: {}".format(instr, virtual, virt_needs_load))
-
-                if temp_needs_save:
-                    prologue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
-
-                if virt_needs_load:
-                    prologue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
-
-                epilogue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
-
-                if temp_needs_save:
-                    epilogue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
-
-                new_args.append(temp_reg)
-                curr_temp += 1
+        if virtual not in new_map:
+            if virtual[0] == "$":
+                new_args.append(virtual)
+                new_map[virtual] = virtual
             else:
-                new_args.append(physical)
+                physical = reg_map[virtual]
+                if physical == "spill":
+                    temp_reg = "$t%d" % curr_temp
+                    temp_needs_save = temp_reg in reg_map.values()
+                    virt_needs_load = virtual in instr_uses(instr)
+
+                    # print("instr is: {}\t reg is: {}\t needs_load: {}".format(instr, virtual, virt_needs_load))
+
+                    if temp_needs_save:
+                        prologue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+
+                    if virt_needs_load:
+                        prologue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+
+                    epilogue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+
+                    if temp_needs_save:
+                        epilogue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+
+                    new_args.append(temp_reg)
+                    new_map[virtual] = temp_reg
+                    curr_temp += 1
+                else:
+                    new_args.append(physical)
+                    new_map[virtual] = physical
+        else:
+            new_args.append(new_map[virtual])
 
     return prologue, epilogue, new_args
 
@@ -379,7 +386,11 @@ def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCIn
 
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
-    # print(offsets)
+
+    # print(function.name)
+    # pp = pprint.PrettyPrinter(indent=4)
+    # pp.pprint(offsets)
+
     curr_offset = 4
     for arg in function.args[4:]:
         offsets[arg] = curr_offset 

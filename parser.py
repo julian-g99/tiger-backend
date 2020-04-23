@@ -66,7 +66,7 @@ def get_arguments(line):
 
 
 def get_variables(line):
-    colon_index = line.find(": ")
+    colon_index = line.find(":")
     if colon_index != -1:
         var_sub = line[colon_index + 2:]
         return [var.strip() for var in var_sub.split(", ")]

@@ -21,13 +21,13 @@ def main():
     functions = find_functions(instructions)
     mc_functions = []
     for func in functions:
-        # print(func.name + ":")
         translated = []
         for i in func.body():
-            mc_instr = instr_to_asm(i, function_name=func.name)
+            mc_instr = instr_to_asm(i, function=func)
             translated += mc_instr
-        # for i in translated:
-            # print("\t%s" % i)
+        print(func.name + ":")
+        for i in translated:
+            print("\t%s" % i)
         mc_functions.append(MCFunction(name=func.name, args=func.args, int_arrs=func.int_arrs, instrs=translated))
 
     if args.allocator == 'greedy':
@@ -39,25 +39,28 @@ def main():
         pattern = re.compile(r"\$[stav]\d|zero|\d+")
         allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
 
+    should_print = False
     # Continue selecting from here
-    print(".text")
+    if should_print:
+        print(".text")
     for function in mc_functions:
-        print(function.name + ":")
         prologue, translated_body, epilogue, rtn = parse_function(function)
-        for i in prologue:
-            print("\t%s" % i)
-        print()
+        if should_print:
+            print(function.name + ":")
+            for i in prologue:
+                print("\t%s" % i)
+            print()
 
-        for i in translated_body:
-            print("\t%s" % i)
-        print()
+            for i in translated_body:
+                print("\t%s" % i)
+            print()
 
-        for i in epilogue:
-            print("\t%s" % i)
-        print()
+            for i in epilogue:
+                print("\t%s" % i)
+            print()
 
-        for i in rtn:
-            print("\t%s" % i)
+            for i in rtn:
+                print("\t%s" % i)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from typing import List
 
 class Function:
     def __init__(self, instructions: List[IRInstruction]):
+        self.curr_array_assign = 0
         self.instructions = instructions
         self.__check_types()
         self.name = self.__get_name()

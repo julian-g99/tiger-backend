@@ -2,7 +2,7 @@ class SymbolicMap:
     def __init__(self):
         self.dict = dict()
         self.curr = 0
-        self.prefix = "x"
+        self.prefix = "fpt"
 
     def __getitem__(self, key):
         if key not in self.dict.keys():

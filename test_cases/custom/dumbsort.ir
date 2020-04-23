@@ -1,0 +1,21 @@
+#start_function
+void sort(int[2] A):
+int-list:
+float-list:
+    call, puti, A
+    call, putc, 10
+
+    array_store, 0, A, 0
+    array_store, 2, A, 1
+#end_function
+
+#start_function
+void main():
+int-list: A[2], b
+float-list:
+
+    call, puti, A
+    call, putc, 10
+
+    call, sort, A
+#end_function

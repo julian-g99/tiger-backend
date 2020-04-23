@@ -1,5 +1,5 @@
 RWMEM = ['lb', 'lw', 'sb', 'sw']
-branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
+branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne', 'blez']
 
 class MCInstruction:
     def __init__(self, op, regs=None, imm=None, offset=None, target=None,
@@ -54,5 +54,5 @@ class MCInstruction:
         if reg == None:
             return None
         if type(reg) == list:
-            return [r.lower() for r in reg]
-        return reg.lower()
+            return [r for r in reg]
+        return reg
