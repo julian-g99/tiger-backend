@@ -6,18 +6,21 @@ mipsPhysicalRegTable = {'$t':10, '$s':8}
 virutalRegRegex = re.compile(r'!?[a-zA-Z_][a-zA-Z0-9_]*')
 
 
-def greedyAlloc(instructions):
+def greedyAlloc(instructions, argCount=0, jrCount=0, choke=None):
     vregs = _parseVirtualRegs(instructions)
-    pregs = _getMIPSPhyicicalRegs('$t') # allow for customization later
+    pregs = _getMIPSPhyicicalRegs('$t', customCount=choke) # allow for customization later
     regMap = _getAllocationMap(instructions, vregs=vregs, pregs=pregs)
+    print(regMap)
 
     newInstructions = []
     # setup the frame and load $fp
-    frameMap = _allocVirtualRegsOnStack(newInstructions, regMap)
+    frameMap = _getFrameMap(regMap)
     for instruction in instructions:
         newInstructions += _mapInstruction(instruction, regMap, frameMap)
-    _popVirtualRegsOffStack(newInstructions, frameMap)
-    _setUnknownOffsets(instructions, len(vregs))
+    # _setUnknownOffsets(instructions, len(vregs)) 
+    _insertFrameSetup(newInstructions, regMap, argCount=argCount)
+    print(jrCount)
+    _insertFrameBreakDown(newInstructions, frameMap, jrCount=jrCount)
     return newInstructions
 
 def _setUnknownOffsets(instructions, numVregs):
@@ -27,6 +30,11 @@ def _setUnknownOffsets(instructions, numVregs):
             offset = int(instr.offset[:-1])
             offset += numVregs * 4
             instructions[i].offset = offset
+
+def _insertFrameSetup(instructions, regMap, argCount=0):
+    frameOffset = len(regMap.keys()) * -4
+    instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+    instructions.insert(argCount+1, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']))
 
 # intelligent instruction mapping that handles spilled registers
 def _mapInstruction(instruction, regMap, frameMap):
@@ -161,10 +169,7 @@ def _stashReg(victim, regMap, frameMap):
         MIPSInstruction('sw', targetReg='$fp', sourceRegs=[physicalReg], offset=victimOffset),
     ]
 
-def _allocVirtualRegsOnStack(instructions, regMap):
-    frameOffset = len(regMap.keys()) * -4
-    instructions.insert(0, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
-    instructions.insert(1, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']))
+def _getFrameMap(regMap):
     frameMap = {}
     i = 0
     for reg in regMap.keys():
@@ -172,9 +177,9 @@ def _allocVirtualRegsOnStack(instructions, regMap):
         i += 1
     return frameMap
 
-def _popVirtualRegsOffStack(instructions, frameMap):
+def _insertFrameBreakDown(instructions, frameMap, jrCount=0):
     frameOffset = len(frameMap.keys()) * 4
-    instructions.append(MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+    instructions.insert(-jrCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
 def _getAllocationMap(instructions, vregs=None, pregs=None):
     if vregs == None:

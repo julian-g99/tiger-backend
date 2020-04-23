@@ -11,10 +11,6 @@ class MIPSFunction():
     
     def _fromTigerIRInstructions(self, lines):
         instructions = []
-        # load args
-        args = self._parseTigerIRFunctionArgs(lines)
-        instructions += self._getArgStackLoads(args)
-
         # parse instructions
         for line in lines[4:]:
             parsed = parseLine(line)
@@ -26,10 +22,26 @@ class MIPSFunction():
             line = "assign, {}, {}, 0".format(arr.symbol, arr.size)
             instructions = parseLine(line) + instructions
         
-        # insert calling convention
-        instructions = self._insertCallingConvention(instructions)
+        # load args
+        args = self._parseTigerIRFunctionArgs(lines)
+        instructions = self._getArgStackLoads(args) + instructions
+
+        # process jr instruction
+        jrCount = self._processReturn(instructions)
+
+        # allocate physical registers
+        argCount = len(args)
+        instructions = self._getAllocatedPhysicalRegisters(instructions, argCount=argCount, jrCount=jrCount)
+
+        # insert pre calling convention
+        self._insertPreCallingConvention(instructions, argCount=argCount)
+
+        # insert post calling convention
+        self._insertPostCallingConvention(instructions, jrCount=jrCount)
+
         # insert function name label
         instructions.insert(0, MIPSInstruction('label', target=self.name))
+
         return instructions
 
     def _parseTigerIRFunctionName(self, lines):
@@ -55,13 +67,13 @@ class MIPSFunction():
             return 0
         return len(ints.split(','))
     
-    # assumes the current stack pointer is offset by 40 (rv + $fp + 8 $s regs + num vregs) from last arg on stack ($ra not included)
+    # assumes the current stack pointer is point at the return value.
     def _getArgStackLoads(self, args):
         instructions = []
         for i in range(0, len(args)):
             arg = args[i]
-            offset = (len(args) - i) * 4 + 40
-            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=str(offset)+'?'))
+            offset = (len(args) - i) * 4
+            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
         return instructions
         
     def _parseTigerIRLocalArrays(self, lines):
@@ -99,25 +111,26 @@ class MIPSFunction():
             arrayArgs.append(MIPSFunctionArg(symbol, isArray=True, size=size))
         return arrayArgs
     
-    def _insertCallingConvention(self, instructions):
-        newInstructions = ra.greedyAlloc(instructions)
+    def _insertPreCallingConvention(self, instructions, argCount=0):
         if self.name != 'main':
-            pre_convention = []
-            pre_convention += self._getSregSaves()
-            pre_convention += self._saveReg('$fp')
-            pre_convention += self._saveReg('$ra')
-
-            post_convention = []
-            post_convention += self._restoreReg('$ra')
-            post_convention += self._restoreReg('$fp')
-            post_convention += self._getSregRestores()
-
-            newInstructions = pre_convention + newInstructions + post_convention
-            newInstructions = self._processReturn(newInstructions)
-        if self.name == 'main':
-            newInstructions += self._getSystemExit()
-        return newInstructions
+            preConvention = []
+            preConvention += self._getSregSaves()
+            preConvention += self._saveReg('$fp')
+            preConvention += self._saveReg('$ra')
+            i = 0
+            for instr in preConvention:
+                instructions.insert(argCount+i, instr)
+                i+=1
     
+    def _insertPostCallingConvention(self, instructions, jrCount=0):
+        postConvention = []
+        if self.name != 'main':
+            postConvention += self._restoreReg('$ra')
+            postConvention += self._restoreReg('$fp')
+            postConvention += self._getSregRestores()
+            for instr in postConvention:
+                instructions.insert(-jrCount, instr)
+
     def _getSystemExit(self):
         return [
             MIPSInstruction("li", targetReg="$v0", imm=10),
@@ -132,13 +145,19 @@ class MIPSFunction():
                 jrInstructions = parseJR(instr)
             else:
                 newInstructions.append(instr)
-        if jrInstructions != None:
-            newInstructions += jrInstructions
-        else:
-            newInstructions += [
-                MIPSInstruction('jr', sourceRegs=['$ra'])
-            ]
-        return newInstructions
+    
+        if jrInstructions == None:
+            if self.name == 'main':
+                jrInstructions = self._getSystemExit()
+            else:
+                jrInstructions = [ MIPSInstruction('jr', sourceRegs=['$ra']) ]
+                
+        
+        newInstructions += jrInstructions
+        instructions.clear()
+        for instr in newInstructions:
+            instructions.append(instr)
+        return len(jrInstructions)
 
     def _getSregSaves(self):
         instructions = []
@@ -175,6 +194,9 @@ class MIPSFunction():
             MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0),
             MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4)
         ]
+
+    def _getAllocatedPhysicalRegisters(self, instructions, jrCount=0, argCount=0):
+        return ra.greedyAlloc(instructions, choke=9, jrCount=jrCount, argCount=argCount)
 
 class MIPSFunctionArg():
     def __init__(self, symbol, isArray=False, size=1):

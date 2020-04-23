@@ -1,11 +1,14 @@
 #start_function
 void main():
-int-list: a, b, arr[2]
+int-list: a, b, c, d, e, arr[2]
 float-list:
     add, a, 0, 1
     add, b, 0, 1
-    array_store, a, arr, 0
-    array_store, b, arr, 1
+    add, c, 0, 1
+    add, d, a, b
+    add, e, d, c
+    array_store, d, arr, 0
+    array_store, e, arr, 1
     callr, r, arrSum, arr, 2
     call, puti, r
 #end_function
