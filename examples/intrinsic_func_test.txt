@@ -1,0 +1,15 @@
+#start_function
+void main():
+int-list: arr[2]
+float-list:
+    callr, t0, geti
+    loop:
+    breq, end, t0, 0
+        callr, t1, getc
+        call, putc, t1
+        sub, t0, t0, 1
+        goto, loop
+    end:
+    call, puti, 1
+    call, putc, 65
+#end_function

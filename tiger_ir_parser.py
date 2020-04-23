@@ -10,6 +10,7 @@ call_ops = ['call']
 callr_ops = ['callr']
 array_store_ops = ['array_store']
 array_load_ops = ['array_load']
+intrinsics = ['geti', 'getc', 'puti', 'putc']
 
 regex_var = re.compile("[a-zA-Z_][a-zA-z0-9_]*")
 regex_imm = re.compile("[0-9]+")
@@ -39,7 +40,7 @@ opcodeParseTable = {
 
 immOpcodeParseTable = {
     'add'           :   'addi',
-    'sub'           :   'subi',
+    'sub'           :   None,
     'mult'          :   None,
     'div'           :   None,
     'and'           :   'andi',
@@ -287,6 +288,8 @@ def _parseArrayLoad(tokens):
 def _parseCall(tokens):
     instructions = []
     funcName = tokens[1]
+    if funcName in intrinsics:
+        return _parseIntrinsic(funcName, tokens[-1])
     # save args
     for t in tokens[2:]: # start at first arg
         instructions += _getStackAlloc(1)
@@ -308,6 +311,8 @@ def _parseCallr(tokens):
     op = opcodeParseTable[tokens[0]]
     returnReg = tokens[1]
     funcName = tokens[2]
+    if funcName in intrinsics:
+        return _parseIntrinsic(funcName, returnReg)
     instructions = []
     # save args
     for t in tokens[3:]: # start at first arg
@@ -327,6 +332,55 @@ def _parseCallr(tokens):
     # pop return value and args
     instructions += _getStackPop(len(tokens) - 3 + 1)
     return instructions
+
+def _parseIntrinsic(funcName, token):
+    reg = None
+    imm = None
+    if _isVar(token):
+        reg = token
+    elif _isImm(token):
+        imm = token
+
+    if funcName == 'geti':
+        return [
+            MCInstruction('li', targetReg='$v0', imm=5),
+            MCInstruction('syscall'),
+            MCInstruction('move', targetReg=reg, sourceRegs=['$v0'])
+        ]
+    elif funcName == 'getc':
+        return [
+            MCInstruction('li', targetReg='$v0', imm=12),
+            MCInstruction('syscall'),
+            MCInstruction('move', targetReg=reg, sourceRegs=['$v0'])
+        ]
+    elif funcName == 'puti':
+        if imm != None:
+            return [
+                MCInstruction('li', targetReg='$v0', imm=1),
+                MCInstruction('la', targetReg='$a0', imm=imm),
+                MCInstruction('syscall')
+            ]
+        else:
+            return [
+                MCInstruction('li', targetReg='$v0', imm=1),
+                MCInstruction('move', targetReg='$a0', sourceRegs=[reg]),
+                MCInstruction('syscall')
+            ]
+    elif funcName == 'putc':
+        if imm != None:
+            return [
+                MCInstruction('li', targetReg='$v0', imm=11),
+                MCInstruction('la', targetReg='$a0', imm=imm),
+                MCInstruction('syscall')
+            ]
+        else:
+            return [
+                MCInstruction('li', targetReg='$v0', imm=11),
+                MCInstruction('move', targetReg='$a0', sourceRegs=[reg]),
+                MCInstruction('syscall')
+            ]
+    else:
+        raise ParseException('encountered unrecognized intrinsic: {}'.format(funcName))
 
 def _getStackAlloc(amount):
         imm = amount * -4
