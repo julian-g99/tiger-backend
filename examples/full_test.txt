@@ -1,0 +1,60 @@
+#start_function
+void main(int a, int[3] b):
+int-list: c[2]
+float-list:
+    add, t, s1, s2
+    add, t, s1, 1
+
+    sub, t, s1, s2
+    sub, t, s1, 1
+    
+    mult, t, s1, s2
+    mult, t, s1, 1
+
+    div, t, s1, s2
+    div, t, s1, 1
+    
+    and, t, s1, s2
+    and, t, s1, 1
+
+    or, t, s1, s2
+    or, t, s1, 1
+
+    assign, t, s1
+    assign, t, 1
+
+    assign, arr, 4, 0
+
+    goto, func
+
+    breq, func, s1, s2
+    breq, func, s1, 1
+
+    brneq, func, s1, s2
+    brneq, func, s1, 1
+
+    brlt, func, s1, s2
+    brlt, func, s1, 1
+
+    brgt, func, s1, s2
+    brgt, func, s1, 1
+
+    brgeq, func, s1, s2
+    brgeq, func, s1, 1
+
+    brleq, func, s1, s2
+    brleq, func, s1, 1
+
+    return, s1
+    return, 1
+
+    array_store, s1, arr, 1
+    array_store, 2, arr, 1
+
+    array_load, t, arr, 0
+
+    call, func, s1, s2, 1, 0
+
+    callr, r, func, 10, s1, 3, s2
+
+#end_function

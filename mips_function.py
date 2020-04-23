@@ -1,5 +1,5 @@
 import re
-from tiger_ir_parser import parseLine
+from tiger_ir_parser import parseLine, parseJR
 from mc_instruction import MCInstruction
 
 class MIPSFunction():
@@ -13,15 +13,22 @@ class MIPSFunction():
         # load args
         args = self._parseTigerIRFunctionArgs(lines)
         instructions += self._getArgStackLoads(args)
+
         # parse instructions
         for line in lines[4:]:
             parsed = parseLine(line)
             instructions += parsed
-        localArrays = self._parseTigerIRLocalArrays(lines)
+
         # alloc local arrays
+        localArrays = self._parseTigerIRLocalArrays(lines)
         for arr in localArrays:
             line = "assign, {}, {}, 0".format(arr.symbol, arr.size)
             instructions = parseLine(line) + instructions
+        
+        # insert calling convention
+        instructions = self._insertCallingConvention(instructions)
+        # insert function name label
+        instructions.insert(0, MCInstruction('label', target=self.name))
         return instructions
 
     def _parseTigerIRFunctionName(self, lines):
@@ -40,13 +47,13 @@ class MIPSFunction():
         pargs = [a.split(" ")[1] for a in pargs]
         return pargs
     
-    # assumes the current stack pointer is offset by 40 (ra + rv + 8 $s regs) from last arg on stack
+    # assumes the current stack pointer is offset by 40 (rv + $fp + 8 $s regs) from last arg on stack ($ra not included ion this count)
     def _getArgStackLoads(self, args):
         instructions = []
         for i in range(0, len(args)):
             arg = args[i]
             offset = (len(args) - i) * 4 + 40
-            instructions.append(MCInstruction('lw', regs=[arg, '$sp'], offset=offset))
+            instructions.append(MCInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
         return instructions
         
     def _parseTigerIRLocalArrays(self, lines):
@@ -83,7 +90,86 @@ class MIPSFunction():
             symbol = a.split('[')[0]
             arrayArgs.append(MIPSFunctionArg(symbol, isArray=True, size=size))
         return arrayArgs
-        
+    
+    def _insertCallingConvention(self, instructions):
+        newInstructions = instructions[:]
+        if self.name != 'main':
+            pre_convention = []
+            pre_convention += self._getSregSaves()
+            pre_convention += self._saveReg('$fp')
+            pre_convention += self._saveReg('$ra')
+            
+            # consider doing reg allocation here
+
+            post_convention = []
+            post_convention += self._restoreReg('$ra')
+            post_convention += self._restoreReg('$fp')
+            post_convention += self._getSregRestores()
+
+            newInstructions = pre_convention + newInstructions + post_convention
+            newInstructions = self._processReturn(newInstructions)
+        if self.name == 'main':
+            newInstructions += self._getSystemExit()
+        return newInstructions
+    
+    def _getSystemExit(self):
+        return [
+            MCInstruction("li", targetReg="$v0", imm=10),
+            MCInstruction("syscall")
+        ]
+
+    def _processReturn(self, instructions):
+        newInstructions = []
+        jrInstructions = None
+        for instr in instructions:
+            if instr.op == 'jr':
+                jrInstructions = parseJR(instr)
+            else:
+                newInstructions.append(instr)
+        if jrInstructions != None:
+            newInstructions += jrInstructions
+        else:
+            newInstructions += [
+                MCInstruction('jr', sourceRegs=['$ra'])
+            ]
+        return newInstructions
+
+    def _getSregSaves(self):
+        instructions = []
+        imm = 8 * -4
+        instructions += [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
+        for i in range(0, 8):
+            sreg = '$s' + str(i)
+            offset = i*4
+            instructions += [
+                MCInstruction('sw', targetReg='$sp', sourceRegs=[sreg], offset=offset)
+            ]
+        return instructions
+    
+    def _getSregRestores(self):
+        instructions = []
+        imm = 8 * 4
+        instructions += [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
+        for i in range(0, 8):
+            sreg = '$s' + str(7-i)
+            offset = i*-4
+            instructions += [
+                MCInstruction('lw', targetReg=sreg, sourceRegs=['$sp'], offset=offset),
+            ]
+        return instructions
+    
+    def _saveReg(self, reg):
+        return [
+            MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4),
+            MCInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0)
+        ]
+    
+    def _restoreReg(self, reg):
+        return [
+            MCInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0),
+            MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4)
+        ]
+
 class MIPSFunctionArg():
     def __init__(self, symbol, isArray=False, size=1):
         if (size < 1):

@@ -20,7 +20,6 @@ class MIPSProgram():
             functions = []
             for group in groups:
                 functions.append(MIPSFunction(group))
-            self._insertCallingConvention(functions, alloc=alloc)
             return functions
     
     def _writeToSFile(self, fname):

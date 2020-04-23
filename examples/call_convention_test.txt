@@ -14,8 +14,17 @@ void arrSum(int[2] arr, int x):
 int-list:
 float-list:
     array_load, a, arr, 0
-    array_load, b, arr, 0
+    array_load, b, arr, 1
     add, c, a, b
     add, c, c, x
+    callr, c, double, c
     return, c
+#end_function
+
+#start_function
+void double(int x):
+int-list:
+float-list:
+    mult, c, x, 2
+    return, c 
 #end_function

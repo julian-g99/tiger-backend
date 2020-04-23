@@ -2,47 +2,42 @@ RWMEM = ['lb', 'lw', 'sb', 'sw']
 branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
 class MCInstruction:
-    def __init__(self, op, regs=None, imm=None, offset=None, target=None):
+    def __init__(self, op, targetReg=None, sourceRegs=None, imm=None, offset=None, target=None):
         self.op = self._formatOp(op)
-        self.regs = self._formatRegs(regs)
+        self.targetReg = self._formatRegs(targetReg)
+        self.sourceRegs = self._formatRegs(sourceRegs)
         self.imm = imm
         self.offset = offset
         self.target = target
 
     def __str__(self):
-        # NOTE: call and callr should never remain in the final output, so their string representation is mostly for debugging
-        if self.op == "call":
-            assert(self.function_name is not None)
-            assert(self.arguments is not None)
-            return "call:\n\
-                    function_name: {}, arguments:{}".format(self.function_name, self.arguments)
-        if self.op == "callr":
-            assert(self.function_name is not None)
-            assert(self.arguments is not None)
-            assert(self.return_dest is not None)
-            return "callr:\n\
-                    return_dest: {}, function_name: {}, arguments:{}".format(self.return_dest, self.function_name, self.arguments)
         if self.op == 'label':
             return self.target + ':'
         if self.op == 'noop':
             return self.op
         if self.op == 'syscall':
             return self.op
-        if self.op in RWMEM:
-            if self.offset != None:
-                return '{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
-            else:
-                return '{} {}, ({})'.format(self.op, self.regs[0], self.regs[1]) 
+        if self.op in 'sw':
+            return '{} {}, {}({})'.format(self.op, self.sourceRegs[0], self.offset, self.targetReg)
+        if self.op in 'lw':
+            return '{} {}, {}({})'.format(self.op, self.targetReg, self.offset, self.sourceRegs[0])
+        if self.op in ['jal', 'j']:
+            return '{} {}'.format(self.op, self.target) 
         outstr = self.op
-        if self.regs != None:
-            outstr += ' ' + ', '.join(self.regs)
+        regs = []
+        if self.targetReg != None:
+            regs.append(self.targetReg)
+        if self.sourceRegs != None:
+            regs += self.sourceRegs
+    
+        outstr += ' ' + ', '.join(regs)
         if self.imm != None:
             outstr += ', ' + str(self.imm)
         if self.target != None:
             if self.op in branches:
                 outstr += ', ' + self.target
             else:
-                outstr += ' ' + self.target
+                outstr += ', ' + self.target
         return outstr
 
     def _formatOp(self, op):
