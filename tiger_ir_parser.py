@@ -1,4 +1,4 @@
-from mc_instruction import MCInstruction
+from mips_instruction import MIPSInstruction
 import re
 
 binary_ops = ['add', 'sub', 'mult', 'div', 'and', 'or']
@@ -60,26 +60,26 @@ immOpcodeParseTable = {
     'array_load'    :   None,
 }
 
-# The return function cannot be parsed before calling convention is inserted so it is put in a shell MCInstruction.
+# The return function cannot be parsed before calling convention is inserted so it is put in a shell MIPSInstruction.
 # This method is used during the calling convention step to finish the parsing of the return instruction
 def parseJR(instruction):
     sourceRegs = instruction.sourceRegs
     imm = instruction.imm
     if imm != None:
         return [
-            MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-            MCInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0),
-            MCInstruction('jr', sourceRegs=['$ra'])
+            MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+            MIPSInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0),
+            MIPSInstruction('jr', sourceRegs=['$ra'])
         ]
     else:
         return [
-            MCInstruction('sw', targetReg='$sp', sourceRegs=sourceRegs, offset=0),
-            MCInstruction('jr', sourceRegs=['$ra'])
+            MIPSInstruction('sw', targetReg='$sp', sourceRegs=sourceRegs, offset=0),
+            MIPSInstruction('jr', sourceRegs=['$ra'])
         ]
 
 def parseLine(line):
     if _isLabel(line):
-        return [ MCInstruction('label', target=line[:-1]) ]
+        return [ MIPSInstruction('label', target=line[:-1]) ]
     tokens = line.split(",")
     tokens = [t.strip(" ") for t in tokens]
     if len(tokens) < 1:
@@ -130,32 +130,32 @@ def _parseBinary(tokens):
         op = immOpcodeParseTable[tokens[0]]
         if op != None:
             return [
-                MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
-                MCInstruction(op, targetReg=regs[0], sourceRegs=['!x0'], imm=imms[1])
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction(op, targetReg=regs[0], sourceRegs=['!x0'], imm=imms[1])
             ]
         else:
             op = opcodeParseTable[tokens[0]]
             return [
-                MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
-                MCInstruction('addi', targetReg='!x1', sourceRegs=['$zero'], imm=imms[1]),
-                MCInstruction(op, targetReg=regs[0], sourceRegs=['!x0, !x1'])
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction('addi', targetReg='!x1', sourceRegs=['$zero'], imm=imms[1]),
+                MIPSInstruction(op, targetReg=regs[0], sourceRegs=['!x0, !x1'])
             ]
     elif len(imms) == 1:
         op = immOpcodeParseTable[tokens[0]]
         if op != None:
             return [
-                MCInstruction(op, targetReg=regs[0], sourceRegs=[regs[1]], imm=imms[0]),
+                MIPSInstruction(op, targetReg=regs[0], sourceRegs=[regs[1]], imm=imms[0]),
             ]
         else:
             op = opcodeParseTable[tokens[0]]
             return [
-                MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
-                MCInstruction(op, targetReg=regs[0], sourceRegs=[regs[1], '!x0'])
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction(op, targetReg=regs[0], sourceRegs=[regs[1], '!x0'])
             ]
     elif len(regs) == 3:
         op = opcodeParseTable[tokens[0]]
         return [
-            MCInstruction(op, targetReg=regs[0], sourceRegs=regs[1:])
+            MIPSInstruction(op, targetReg=regs[0], sourceRegs=regs[1:])
         ]
     else:
         raise ParseException("Failed to parse token list: {}".format(tokens))
@@ -177,28 +177,28 @@ def _parseAssign(tokens):
     op = opcodeParseTable[tokens[0]]
     if imm != None:
         return [
-            MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-            MCInstruction(op, targetReg=regs[0], sourceRegs=['!x0'])
+            MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+            MIPSInstruction(op, targetReg=regs[0], sourceRegs=['!x0'])
         ]
     else:
         return [
-            MCInstruction(op, targetReg=regs[0], sourceRegs=[regs[1]])
+            MIPSInstruction(op, targetReg=regs[0], sourceRegs=[regs[1]])
         ]
     
 def _parseArrayAssign(tokens):
     name = tokens[1]
     size = int(tokens[2]) * 4
     return [
-        MCInstruction('li', targetReg='$v0', imm=9),
-        MCInstruction('la', targetReg='$a0', imm=size),
-        MCInstruction('syscall'),
-        MCInstruction('move', targetReg=name, sourceRegs=['$v0'])
+        MIPSInstruction('li', targetReg='$v0', imm=9),
+        MIPSInstruction('la', targetReg='$a0', imm=size),
+        MIPSInstruction('syscall'),
+        MIPSInstruction('move', targetReg=name, sourceRegs=['$v0'])
     ]
 
 def _parseGoto(tokens):
     op = opcodeParseTable[tokens[0]]
     target = tokens[1]
-    return [MCInstruction(op, target=target)]
+    return [MIPSInstruction(op, target=target)]
 
 def _parseBranch(tokens):
     regs = []
@@ -217,23 +217,23 @@ def _parseBranch(tokens):
         op = opcodeParseTable[tokens[0]]
         if imm != None:
             return [
-                MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-                MCInstruction(op, sourceRegs=[regs[0], '!x0'], target=target)
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+                MIPSInstruction(op, sourceRegs=[regs[0], '!x0'], target=target)
             ]
         else:
-            return [MCInstruction(op, sourceRegs=regs, target=target)]
+            return [MIPSInstruction(op, sourceRegs=regs, target=target)]
     else:
         op = opcodeParseTable[tokens[0]]
         if (imm != None):
             return [
-                MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-                MCInstruction('sub', targetReg ='!x0', sourceRegs=[regs[0], '!x0']),
-                MCInstruction(op, sourceRegs=['!x0'], target=target)
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+                MIPSInstruction('sub', targetReg ='!x0', sourceRegs=[regs[0], '!x0']),
+                MIPSInstruction(op, sourceRegs=['!x0'], target=target)
             ]
         else:
             return [
-                MCInstruction('sub', targetReg='!x0', sourceRegs=regs),
-                MCInstruction(op, sourceRegs=['!x0'], target=target)
+                MIPSInstruction('sub', targetReg='!x0', sourceRegs=regs),
+                MIPSInstruction(op, sourceRegs=['!x0'], target=target)
             ]
 
 def _parseReturn(tokens):
@@ -248,11 +248,11 @@ def _parseReturn(tokens):
     op = opcodeParseTable[tokens[0]]
     if imm != None:
         return [
-            MCInstruction(op, imm=imm) # To be parsed into more intructions later after calling convention
+            MIPSInstruction(op, imm=imm) # To be parsed into more intructions later after calling convention
         ]
     else:
         return [
-            MCInstruction(op, sourceRegs=[regs[0]]) # To be parsed into more intructions later after calling convention
+            MIPSInstruction(op, sourceRegs=[regs[0]]) # To be parsed into more intructions later after calling convention
         ]
 
 def _parseArrayStore(tokens):
@@ -268,12 +268,12 @@ def _parseArrayStore(tokens):
         raise ParseException("Failed to parse token: {} of tokens: {}".format(tokens[1], tokens))
     if imm != None:
         return [
-            MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-            MCInstruction('sw', targetReg=arrayReg, sourceRegs=['!x0'], offset=offset)
+            MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+            MIPSInstruction('sw', targetReg=arrayReg, sourceRegs=['!x0'], offset=offset)
         ]
     else:
         return [
-            MCInstruction('sw', targetReg=arrayReg, sourceRegs=regs, offset=offset)
+            MIPSInstruction('sw', targetReg=arrayReg, sourceRegs=regs, offset=offset)
         ]
 
 def _parseArrayLoad(tokens):
@@ -281,7 +281,7 @@ def _parseArrayLoad(tokens):
     arrayReg = tokens[2]
     offset = int(tokens[3]) * 4
     return [
-        MCInstruction('lw', targetReg=targetReg, sourceRegs=[arrayReg], offset=offset)
+        MIPSInstruction('lw', targetReg=targetReg, sourceRegs=[arrayReg], offset=offset)
         ]
 
 # includes some calling convention
@@ -301,7 +301,7 @@ def _parseCall(tokens):
             raise ParseException("Failed to parse token: {} of tokens: {}".format(t, tokens))
     # jump and link
     op = opcodeParseTable[tokens[0]]
-    instructions.append(MCInstruction(op, target=funcName))
+    instructions.append(MIPSInstruction(op, target=funcName))
     # pop args
     instructions += _getStackPop(len(tokens) - 2)
     return instructions
@@ -326,7 +326,7 @@ def _parseCallr(tokens):
     # alloc for return value
     instructions += _getStackAlloc(1)
     # jump and link
-    instructions.append(MCInstruction(op, target=funcName))
+    instructions.append(MIPSInstruction(op, target=funcName))
     # get return value
     instructions += _getRegLoad(returnReg)
     # pop return value and args
@@ -343,64 +343,64 @@ def _parseIntrinsic(funcName, token):
 
     if funcName == 'geti':
         return [
-            MCInstruction('li', targetReg='$v0', imm=5),
-            MCInstruction('syscall'),
-            MCInstruction('move', targetReg=reg, sourceRegs=['$v0'])
+            MIPSInstruction('li', targetReg='$v0', imm=5),
+            MIPSInstruction('syscall'),
+            MIPSInstruction('move', targetReg=reg, sourceRegs=['$v0'])
         ]
     elif funcName == 'getc':
         return [
-            MCInstruction('li', targetReg='$v0', imm=12),
-            MCInstruction('syscall'),
-            MCInstruction('move', targetReg=reg, sourceRegs=['$v0'])
+            MIPSInstruction('li', targetReg='$v0', imm=12),
+            MIPSInstruction('syscall'),
+            MIPSInstruction('move', targetReg=reg, sourceRegs=['$v0'])
         ]
     elif funcName == 'puti':
         if imm != None:
             return [
-                MCInstruction('li', targetReg='$v0', imm=1),
-                MCInstruction('la', targetReg='$a0', imm=imm),
-                MCInstruction('syscall')
+                MIPSInstruction('li', targetReg='$v0', imm=1),
+                MIPSInstruction('la', targetReg='$a0', imm=imm),
+                MIPSInstruction('syscall')
             ]
         else:
             return [
-                MCInstruction('li', targetReg='$v0', imm=1),
-                MCInstruction('move', targetReg='$a0', sourceRegs=[reg]),
-                MCInstruction('syscall')
+                MIPSInstruction('li', targetReg='$v0', imm=1),
+                MIPSInstruction('move', targetReg='$a0', sourceRegs=[reg]),
+                MIPSInstruction('syscall')
             ]
     elif funcName == 'putc':
         if imm != None:
             return [
-                MCInstruction('li', targetReg='$v0', imm=11),
-                MCInstruction('la', targetReg='$a0', imm=imm),
-                MCInstruction('syscall')
+                MIPSInstruction('li', targetReg='$v0', imm=11),
+                MIPSInstruction('la', targetReg='$a0', imm=imm),
+                MIPSInstruction('syscall')
             ]
         else:
             return [
-                MCInstruction('li', targetReg='$v0', imm=11),
-                MCInstruction('move', targetReg='$a0', sourceRegs=[reg]),
-                MCInstruction('syscall')
+                MIPSInstruction('li', targetReg='$v0', imm=11),
+                MIPSInstruction('move', targetReg='$a0', sourceRegs=[reg]),
+                MIPSInstruction('syscall')
             ]
     else:
         raise ParseException('encountered unrecognized intrinsic: {}'.format(funcName))
 
 def _getStackAlloc(amount):
         imm = amount * -4
-        return [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm) ]
+        return [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm) ]
 
 def _getImmStore(imm):
     return [
-        MCInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-        MCInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0)
+        MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+        MIPSInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0)
     ]
 
 def _getRegStore(reg):
-        return [ MCInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0) ]
+        return [ MIPSInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0) ]
 
 def _getRegLoad(reg):
-        return [ MCInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0) ]
+        return [ MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0) ]
 
 def _getStackPop(amount):
     imm = amount * 4
-    return [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm) ]
+    return [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm) ]
 
 class ParseException(Exception):
     def __init__(self, msg):

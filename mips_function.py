@@ -1,6 +1,6 @@
 import re
 from tiger_ir_parser import parseLine, parseJR
-from mc_instruction import MCInstruction
+from mips_instruction import MIPSInstruction
 
 class MIPSFunction():
     def __init__(self, lines):
@@ -28,7 +28,7 @@ class MIPSFunction():
         # insert calling convention
         instructions = self._insertCallingConvention(instructions)
         # insert function name label
-        instructions.insert(0, MCInstruction('label', target=self.name))
+        instructions.insert(0, MIPSInstruction('label', target=self.name))
         return instructions
 
     def _parseTigerIRFunctionName(self, lines):
@@ -53,7 +53,7 @@ class MIPSFunction():
         for i in range(0, len(args)):
             arg = args[i]
             offset = (len(args) - i) * 4 + 40
-            instructions.append(MCInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
+            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
         return instructions
         
     def _parseTigerIRLocalArrays(self, lines):
@@ -114,8 +114,8 @@ class MIPSFunction():
     
     def _getSystemExit(self):
         return [
-            MCInstruction("li", targetReg="$v0", imm=10),
-            MCInstruction("syscall")
+            MIPSInstruction("li", targetReg="$v0", imm=10),
+            MIPSInstruction("syscall")
         ]
 
     def _processReturn(self, instructions):
@@ -130,44 +130,44 @@ class MIPSFunction():
             newInstructions += jrInstructions
         else:
             newInstructions += [
-                MCInstruction('jr', sourceRegs=['$ra'])
+                MIPSInstruction('jr', sourceRegs=['$ra'])
             ]
         return newInstructions
 
     def _getSregSaves(self):
         instructions = []
         imm = 8 * -4
-        instructions += [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
+        instructions += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
         for i in range(0, 8):
             sreg = '$s' + str(i)
             offset = i*4
             instructions += [
-                MCInstruction('sw', targetReg='$sp', sourceRegs=[sreg], offset=offset)
+                MIPSInstruction('sw', targetReg='$sp', sourceRegs=[sreg], offset=offset)
             ]
         return instructions
     
     def _getSregRestores(self):
         instructions = []
         imm = 8 * 4
-        instructions += [ MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
+        instructions += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
         for i in range(0, 8):
             sreg = '$s' + str(7-i)
             offset = i*-4
             instructions += [
-                MCInstruction('lw', targetReg=sreg, sourceRegs=['$sp'], offset=offset),
+                MIPSInstruction('lw', targetReg=sreg, sourceRegs=['$sp'], offset=offset),
             ]
         return instructions
     
     def _saveReg(self, reg):
         return [
-            MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4),
-            MCInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0)
+            MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4),
+            MIPSInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0)
         ]
     
     def _restoreReg(self, reg):
         return [
-            MCInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0),
-            MCInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4)
+            MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0),
+            MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4)
         ]
 
 class MIPSFunctionArg():

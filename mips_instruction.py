@@ -1,7 +1,7 @@
 RWMEM = ['lb', 'lw', 'sb', 'sw']
 branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne']
 
-class MCInstruction:
+class MIPSInstruction:
     def __init__(self, op, targetReg=None, sourceRegs=None, imm=None, offset=None, target=None):
         self.op = self._formatOp(op)
         self.targetReg = self._formatRegs(targetReg)
