@@ -1,7 +1,7 @@
 import re
 from tiger_ir_parser import parseLine, parseJR
 from mips_instruction import MIPSInstruction
-import register_allocator as regalloc
+import register_allocator as ra
 
 class MIPSFunction():
     def __init__(self, lines):
@@ -48,13 +48,20 @@ class MIPSFunction():
         pargs = [a.split(" ")[1] for a in pargs]
         return pargs
     
-    # assumes the current stack pointer is offset by 40 (rv + $fp + 8 $s regs) from last arg on stack ($ra not included ion this count)
+    def _getIntListCount(self, lines):
+        intList = lines[2]
+        ints = intList.split(':')[1]
+        if ints == '':
+            return 0
+        return len(ints.split(','))
+    
+    # assumes the current stack pointer is offset by 40 (rv + $fp + 8 $s regs + num vregs) from last arg on stack ($ra not included)
     def _getArgStackLoads(self, args):
         instructions = []
         for i in range(0, len(args)):
             arg = args[i]
             offset = (len(args) - i) * 4 + 40
-            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
+            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=str(offset)+'?'))
         return instructions
         
     def _parseTigerIRLocalArrays(self, lines):
@@ -93,15 +100,12 @@ class MIPSFunction():
         return arrayArgs
     
     def _insertCallingConvention(self, instructions):
-        newInstructions = instructions[:]
+        newInstructions = ra.greedyAlloc(instructions)
         if self.name != 'main':
             pre_convention = []
             pre_convention += self._getSregSaves()
             pre_convention += self._saveReg('$fp')
             pre_convention += self._saveReg('$ra')
-            
-            # consider doing reg allocation here
-            regalloc.greedyAlloc(newInstructions)
 
             post_convention = []
             post_convention += self._restoreReg('$ra')
@@ -112,8 +116,6 @@ class MIPSFunction():
             newInstructions = self._processReturn(newInstructions)
         if self.name == 'main':
             newInstructions += self._getSystemExit()
-            # consider doing reg allocation here
-            regalloc.greedyAlloc(newInstructions)
         return newInstructions
     
     def _getSystemExit(self):

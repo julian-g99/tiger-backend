@@ -1,5 +1,6 @@
 import re
 from control_flow_graph import BB
+from mips_instruction import MIPSInstruction
 
 mipsPhysicalRegTable = {'$t':10, '$s':8}
 virutalRegRegex = re.compile(r'!?[a-zA-Z_][a-zA-Z0-9_]*')
@@ -9,23 +10,171 @@ def greedyAlloc(instructions):
     vregs = _parseVirtualRegs(instructions)
     pregs = _getMIPSPhyicicalRegs('$t') # allow for customization later
     regMap = _getAllocationMap(instructions, vregs=vregs, pregs=pregs)
-    
-    # hot swap
-    for i in range(0, len(instructions)):
-        _mapInstruction(instructions[i], regMap)
 
-# only supports hot swap
-def _mapInstruction(instruction, regMap):
+    newInstructions = []
+    # setup the frame and load $fp
+    frameMap = _allocVirtualRegsOnStack(newInstructions, regMap)
+    for instruction in instructions:
+        newInstructions += _mapInstruction(instruction, regMap, frameMap)
+    _popVirtualRegsOffStack(newInstructions, frameMap)
+    _setUnknownOffsets(instructions, len(vregs))
+    return newInstructions
+
+def _setUnknownOffsets(instructions, numVregs):
+    for i in range(0, len(instructions)):
+        instr = instructions[i]
+        if type(instr.offset) == str:
+            offset = int(instr.offset[:-1])
+            offset += numVregs * 4
+            instructions[i].offset = offset
+
+# intelligent instruction mapping that handles spilled registers
+def _mapInstruction(instruction, regMap, frameMap):
+    mappedInstruction = []
+    spillMap = _getSpillMap(instruction, regMap)
+    # spill
+    mappedInstruction += _spillRegs(instruction, spillMap, regMap, frameMap)
+    # hot swap
+    localRegMap = _getLocalRegMap(spillMap, regMap)
+    _hotSwapInstruction(instruction, localRegMap)
+    mappedInstruction.append(instruction)
+    # mop
+    mappedInstruction += _mopRegs(instruction, spillMap, regMap, frameMap)
+    
+    return mappedInstruction
+
+# unintelligent instruction mapping according to localRegMap
+def _hotSwapInstruction(instruction, localRegMap):
     targetReg = instruction.targetReg
     if targetReg != None:
-        if targetReg in regMap.keys():
-            instruction.targetReg = regMap[targetReg]
+        if targetReg in localRegMap.keys():
+            instruction.targetReg = localRegMap[targetReg]
+    
     sourceRegs = instruction.sourceRegs
     if sourceRegs != None:
         for i in range(0, len(sourceRegs)):
             sourceReg = sourceRegs[i]
-            if sourceReg in regMap.keys():
-                instruction.sourceRegs[i] = regMap[sourceReg]
+            if sourceReg in localRegMap.keys():
+                instruction.sourceRegs[i] = localRegMap[sourceReg]
+
+# this local register map will exclude any spilled registered not specified in the spillMap
+def _getLocalRegMap(spillMap, regMap):
+    localRegMap = {}
+    for reg in regMap.keys():
+        if _isMapped(reg, regMap):
+            if reg in spillMap.keys():
+                localRegMap[reg] = None
+                localRegMap[spillMap[reg]] = regMap[reg]
+            else:
+                localRegMap[reg] = regMap[reg]
+    return localRegMap
+
+def _getSpillMap(instruction, regMap):
+    spillMap = {}
+    targetReg = instruction.targetReg
+    sourceRegs = instruction.sourceRegs
+    if sourceRegs != None:
+        for sourceReg in sourceRegs:
+            if sourceReg in regMap.keys() and not _isMapped(sourceReg, regMap):
+                if not sourceReg in spillMap.values():
+                    victim = _selectSourceRegSpillVictim(instruction, spillMap, regMap)
+                    spillMap[victim] = sourceReg
+    if targetReg != None and targetReg in regMap.keys():
+        if not _isMapped(targetReg, regMap):
+            if not targetReg in spillMap.values():
+                victim = _selectTargetRegSpillVictim(instruction, spillMap, regMap)
+                spillMap[victim] = targetReg
+    return spillMap
+
+def _selectTargetRegSpillVictim(instruction, spillMap, regMap):
+    # assumes there are atleast 3 available mapped virtual registers to choose from, not apart of this instruction 
+    for reg in regMap.keys():
+        isMapped = _isMapped(reg, regMap)
+        isNotInSourceRegs = (instruction.sourceRegs == None) or (not reg in instruction.sourceRegs)
+        isNotVictim = not (reg in spillMap.keys())
+        if isMapped and isNotInSourceRegs and isNotVictim:
+            return reg
+    raise AllocationException("failed to select target reg victim for instruction: {}".format(str(instruction)))
+
+def _selectSourceRegSpillVictim(instruction, spillMap, regMap):
+    # assumes there are atleast 3 available mapped virtual registers to choose from, not apart of this instruction 
+    for reg in regMap.keys():
+        isMapped = _isMapped(reg, regMap)
+        isNotInSourceRegs = (instruction.sourceRegs == None) or (not reg in instruction.sourceRegs)
+        isNotTargetReg = (instruction.targetReg == None) or (reg != instruction.targetReg)
+        isNotVictim = not (reg in spillMap.keys())
+        if isMapped and isNotInSourceRegs and isNotVictim:
+            return reg
+    raise AllocationException("failed to select source reg victim for instruction: {}".format(str(instruction)))
+
+def _isMapped(reg, regMap):
+    return regMap[reg] != None
+
+# pre instructions for safely clearing up physical regs for use
+def _spillRegs(instruction, spillMap, regMap, frameMap):
+    newInstructions = []
+    for victim in spillMap.keys():
+        incoming = spillMap[victim]
+        # optimization if spilled reg is the targetReg and doesnt appear in source regs
+        isTargetReg = (instruction.targetReg != None) and (incoming == instruction.targetReg)
+        notInSourceRegs = (instruction.sourceRegs == None) or (incoming not in instruction.sourceRegs)
+        if isTargetReg and notInSourceRegs:
+            # no need to load anything into the target reg so we stash instead of fully swap
+            newInstructions += _stashReg(victim, regMap, frameMap)
+        else:
+            newInstructions += _swapInReg(victim, incoming, regMap, frameMap)
+    return newInstructions
+
+# post instructions for safely restoring virtual regs to their original mapped physical regs
+def _mopRegs(instruction, spillMap, regMap, frameMap):
+    newInstructions = []
+    for victim in spillMap.keys():
+        outgoing = spillMap[victim]
+        newInstructions += _swapOutReg(victim, outgoing, regMap, frameMap)
+    return newInstructions
+
+# puts a victim onto the stack and loads the incoming reg into the victim's former physical reg
+def _swapInReg(victim, incoming, regMap, frameMap):
+    physicalReg = regMap[victim]
+    victimOffset = frameMap[victim]
+    incomingOffset = frameMap[incoming]
+    return [
+        MIPSInstruction('sw', targetReg='$fp', sourceRegs=[physicalReg], offset=victimOffset),
+        MIPSInstruction('lw', targetReg=physicalReg, sourceRegs=['$fp'], offset=incomingOffset)
+    ]
+
+# saves the outgoing reg and returns a victim from the stack back to its original physical register
+def _swapOutReg(victim, outgoing, regMap, frameMap):
+    physicalReg = regMap[victim]
+    victimOffset = frameMap[victim]
+    outgoingOffset = frameMap[outgoing]
+    return [
+        MIPSInstruction('sw', targetReg='$fp', sourceRegs=[physicalReg], offset=outgoingOffset),
+        MIPSInstruction('lw', targetReg=physicalReg, sourceRegs=['$fp'], offset=victimOffset)
+    ]
+
+# puts saves a victim onto the stack so that its physical register can be safely overwritten
+def _stashReg(victim, regMap, frameMap):
+    physicalReg = regMap[victim]
+    victimOffset = frameMap[victim]
+    return [
+        MIPSInstruction('sw', targetReg='$fp', sourceRegs=[physicalReg], offset=victimOffset),
+    ]
+
+def _allocVirtualRegsOnStack(instructions, regMap):
+    frameOffset = len(regMap.keys()) * -4
+    instructions.insert(0, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+    instructions.insert(1, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']))
+    frameMap = {}
+    i = 0
+    for reg in regMap.keys():
+        frameMap[reg] = i * 4
+        i += 1
+    return frameMap
+
+def _popVirtualRegsOffStack(instructions, frameMap):
+    frameOffset = len(frameMap.keys()) * 4
+    instructions.append(MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
 def _getAllocationMap(instructions, vregs=None, pregs=None):
     if vregs == None:
@@ -142,8 +291,32 @@ class AllocationException(Exception):
 
 
 def main():
-    regs = _getMIPSPhyicicalRegs("$a", customCount = None)
-    print(regs)
+    instructions = [
+        MIPSInstruction('add')
+    ]
+
+    regMap = {
+        'a'     : '$t0',
+        'b'     : '$t1',
+        's0'    : None,
+        's1'    : None,
+        'c'     : '$t2',
+        't'     : None, 
+    }
+
+    frameMap = {
+        'a'     :   0,
+        'b'     :   4,
+        's0'    :   8,
+        's1'    :   12,
+        'c'     :   16,
+        't'     :   20
+    }
+
+
+    output = _mapInstruction(instructions[0], regMap, frameMap)
+    for i in output:
+        print(i)
 
 if __name__ == "__main__":
     main()

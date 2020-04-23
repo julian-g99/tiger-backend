@@ -1,17 +1,18 @@
 #start_function
 void main():
-int-list: arr[2]
+int-list: a, b, arr[2]
 float-list:
     add, a, 0, 1
     add, b, 0, 1
     array_store, a, arr, 0
     array_store, b, arr, 1
-    callr, r, arrSum, arr, 2 
+    callr, r, arrSum, arr, 2
+    call, puti, r
 #end_function
 
 #start_function
 void arrSum(int[2] arr, int x):
-int-list:
+int-list: a, b, c
 float-list:
     array_load, a, arr, 0
     array_load, b, arr, 1
@@ -23,7 +24,7 @@ float-list:
 
 #start_function
 void double(int x):
-int-list:
+int-list: c
 float-list:
     mult, c, x, 2
     return, c 

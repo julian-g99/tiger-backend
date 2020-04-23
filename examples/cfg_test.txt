@@ -1,6 +1,6 @@
 #start_function
 void main():
-int-list:
+int-list: count, a, r
 float-list:
     add, count, 0, 10
     loop1:
@@ -16,7 +16,7 @@ float-list:
 
 #start_function
 void func1(int a, int b):
-int-list:
+int-list: c
 float-list:
     add, c, a, b
     return, c
@@ -25,7 +25,7 @@ float-list:
 #start_function
 void func2(int a):
 int-list: int[2] arr
-float-list:
+float-list: d
     mult, d, d, 2
     assign, arr, 10, 0
     return, d
