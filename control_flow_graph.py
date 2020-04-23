@@ -1,4 +1,4 @@
-from mc_instruction import MCInstruction
+from mips_instruction import MIPSInstruction
 
 TERMINATORS = ['label', 'beq', 'bgez', 'bgtz', 'blez', 'bltz', 'bne', 'j']
 
@@ -25,8 +25,8 @@ class BB:
         raise LookupError("Basic Block is empty and thus has no leader")
 
     def addInstruction(self, instruction):
-        if type(instruction) != MCInstruction:
-            raise TypeError("instruction must be of type MCInstruction. Got {}.".format(type(instruction)))
+        if type(instruction) != MIPSInstruction:
+            raise TypeError("instruction must be of type MIPSInstruction. Got {}.".format(type(instruction)))
         self.instructions.append(instruction)
 
 class BBIterator:
@@ -47,6 +47,19 @@ class CFG:
         self.adjList = {}
         self.bbs = []
         self._build()
+    
+    def getInstructionsFromBBs(self):
+        instructions = []
+        pps = []
+        for bb in self.bbs:
+            pps.append(bb.pp)
+        pps.sort()
+        for pp in pps:
+            for bb in self.bbs:
+                if pp == bb.pp:
+                    for instruction in bb:
+                        instructions.append(bb)
+        return instructions
 
     def _build(self):
         if len(self.program) == 0:
@@ -58,8 +71,8 @@ class CFG:
     def _buildR(self, pp, bb):
         if pp < len(self.program):
             instruction = self.program[pp]
-            if type(instruction) != MCInstruction:
-                raise TypeError("instruction must be of type MCInstruction. Got {}".format(type(instruction)))
+            if type(instruction) != MIPSInstruction:
+                raise TypeError("instruction must be of type MIPSInstruction. Got {}".format(type(instruction)))
             if instruction.op == 'jr':
                 # terminate at jr instruction. There is no way to find the target of a jr instruction without simulating a MIPS cpu
                 bb.addInstruction(instruction)
@@ -113,62 +126,3 @@ class CFG:
                 return pp
         raise LookupError("did not find a label matching target {} for instruction {}"
                 .format(target, jInstruction))
-
-
-def main():
-    # program = [
-    #     MCInstruction('label', target='main'),
-    #     MCInstruction('addi', regs=['$t0', '$zero'], imm=10),
-    #     MCInstruction('label', target='loop'),
-    #     MCInstruction('beq', target='exit'),
-    #     MCInstruction('subi', regs=['$t1', '$t0'], imm=5),
-    #     MCInstruction('blez', regs=['$t1'], target='skip'),
-    #     MCInstruction('subi', regs=['$t0', '$t0'], imm=1),
-    #     MCInstruction('j', target='loop'),
-    #     MCInstruction('label', target='skip'),
-    #     MCInstruction('subi', regs=['$t0', '$t0'], imm=5),
-    #     MCInstruction('j', target='loop'),
-    #     MCInstruction('label', target='exit'),
-    #     MCInstruction('jr')
-    # ]
-
-    program = [
-        MCInstruction("label", target="main"),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=1),
-        MCInstruction("addi", regs=["$t1", "$zero"], imm=2),
-        MCInstruction("add", regs=["$t2", "$t0", "$t1"]),
-        MCInstruction("add", regs=["$a0", "$t1", "$t2"]),
-        MCInstruction("jal", target="func"),
-
-        MCInstruction("add", regs=["$s0", "$t2", "$t1"]),
-        MCInstruction("addi", regs=["$s0", "$s0"], imm=9),
-        MCInstruction("label", target="end"),
-        MCInstruction("j", target="end"),
-
-        MCInstruction("label", target="func"),
-        MCInstruction("addi", regs=["$sp", "$sp"], imm=-12),
-        MCInstruction("sw", regs=["$t0", "$sp"], offset=0),
-        MCInstruction("sw", regs=["$t1", "$sp"], offset=4),
-        MCInstruction("sw", regs=["$t2", "$sp"], offset=8),
-        MCInstruction("addi", regs=["$t0", "$zero"], imm=5),
-        MCInstruction("addi", regs=["$t1", "$zero"], imm=7),
-        MCInstruction("add", regs=["$t2", "$t1", "$t0"]),
-        MCInstruction("addi", regs=["$v0", "$t2"], imm=3),
-        MCInstruction("lw", regs=["$t0", "$sp"], offset=0),
-        MCInstruction("lw", regs=["$t1", "$sp"], offset=4),
-        MCInstruction("lw", regs=["$t3", "$sp"], offset=8),
-        MCInstruction("addi", regs=["$sp", "$sp"], imm=12),
-        MCInstruction("jr", regs=["$ra"]),
-    ]
-
-    cfg = CFG(program)
-    print(cfg.adjList)
-    print()
-    for bb in cfg.bbs:
-        print('{}: {}'.format(bb.pp, bb) + ":")
-        for intr in bb.instructions:
-            print("\t" + str(intr))
-
-
-if __name__ == "__main__":
-    main()

@@ -1,6 +1,7 @@
 import re
 from tiger_ir_parser import parseLine, parseJR
 from mips_instruction import MIPSInstruction
+import register_allocator as regalloc
 
 class MIPSFunction():
     def __init__(self, lines):
@@ -100,6 +101,7 @@ class MIPSFunction():
             pre_convention += self._saveReg('$ra')
             
             # consider doing reg allocation here
+            regalloc.greedyAlloc(newInstructions)
 
             post_convention = []
             post_convention += self._restoreReg('$ra')
@@ -110,6 +112,8 @@ class MIPSFunction():
             newInstructions = self._processReturn(newInstructions)
         if self.name == 'main':
             newInstructions += self._getSystemExit()
+            # consider doing reg allocation here
+            regalloc.greedyAlloc(newInstructions)
         return newInstructions
     
     def _getSystemExit(self):

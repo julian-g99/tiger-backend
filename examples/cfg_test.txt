@@ -1,0 +1,32 @@
+#start_function
+void main():
+int-list:
+float-list:
+    add, count, 0, 10
+    loop1:
+        breq, endloop1, count, 0
+        sub, count, count, 1
+
+    endloop1:
+        add, a, 0, 3
+        callr, r, func1, a, 10
+        callr, r, func2, r
+        call, puti, r
+#end_function
+
+#start_function
+void func1(int a, int b):
+int-list:
+float-list:
+    add, c, a, b
+    return, c
+#end_function
+
+#start_function
+void func2(int a):
+int-list: int[2] arr
+float-list:
+    mult, d, d, 2
+    assign, arr, 10, 0
+    return, d
+#end_function

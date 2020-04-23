@@ -1,7 +1,8 @@
 from mips_instruction import MIPSInstruction
 import re
 
-binary_ops = ['add', 'sub', 'mult', 'div', 'and', 'or']
+binary_ops = ['add', 'sub', 'and', 'or']
+loreg_ops = ['mult', 'div']
 assign_ops = ['assign']
 goto_ops = ['goto']
 branch_ops = ['breq', 'brneq', 'brlt', 'brgt', 'brgeq', 'brleq']
@@ -13,7 +14,7 @@ array_load_ops = ['array_load']
 intrinsics = ['geti', 'getc', 'puti', 'putc']
 
 regex_var = re.compile("[a-zA-Z_][a-zA-z0-9_]*")
-regex_imm = re.compile("[0-9]+")
+regex_imm = re.compile("-?[0-9]+")
 regex_label = re.compile("[a-zA-Z_][a-zA-z0-9_]*:")
 
 opcodeParseTable = {
@@ -88,6 +89,8 @@ def parseLine(line):
     op = tokens[0]
     if op in binary_ops:
         return _parseBinary(tokens)
+    elif op in loreg_ops:
+        return _parseLoReg(tokens)
     elif op in assign_ops:
         return _parseAssign(tokens)
     elif op in goto_ops:
@@ -159,6 +162,55 @@ def _parseBinary(tokens):
         ]
     else:
         raise ParseException("Failed to parse token list: {}".format(tokens))
+
+def _parseLoReg(tokens):
+    regs = []
+    imms = []
+    for t in tokens[1:]:
+        if _isVar(t):
+            regs.append(t)
+        elif _isImm(t):
+            imms.append(t)
+        else:
+            raise ParseException("Failed to parse token: {} of tokens: {}".format(t, tokens))
+    if len(imms) == 2:
+        op = immOpcodeParseTable[tokens[0]]
+        if op != None:
+            return [
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction(op, sourceRegs=['!x0'], imm=imms[1]),
+                MIPSInstruction('mflo', targetReg=regs[0])
+            ]
+        else:
+            op = opcodeParseTable[tokens[0]]
+            return [
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction('addi', targetReg='!x1', sourceRegs=['$zero'], imm=imms[1]),
+                MIPSInstruction(op, sourceRegs=['!x0, !x1']),
+                MIPSInstruction('mflo', targetReg=regs[0])
+            ]
+    elif len(imms) == 1:
+        op = immOpcodeParseTable[tokens[0]]
+        if op != None:
+            return [
+                MIPSInstruction(op, targetReg=regs[0], sourceRegs=[regs[1]], imm=imms[0]),
+            ]
+        else:
+            op = opcodeParseTable[tokens[0]]
+            return [
+                MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imms[0]),
+                MIPSInstruction(op, sourceRegs=[regs[1], '!x0']),
+                MIPSInstruction('mflo', targetReg=regs[0])
+            ]
+    elif len(regs) == 3:
+        op = opcodeParseTable[tokens[0]]
+        return [
+            MIPSInstruction(op, sourceRegs=regs[1:]),
+            MIPSInstruction('mflo', targetReg=regs[0])
+        ]
+    else:
+        raise ParseException("Failed to parse token list: {}".format(tokens))
+
 
 def _parseAssign(tokens):
     if len(tokens) == 4:
