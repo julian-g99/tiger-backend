@@ -1,5 +1,5 @@
 import re
-from tiger_ir_parser import parseLine, parseJR
+from tiger_ir_parser import parseLine
 from mips_instruction import MIPSInstruction
 import register_allocator as ra
 
@@ -26,17 +26,14 @@ class MIPSFunction():
         args = self._parseTigerIRFunctionArgs(lines)
         instructions = self._getArgStackLoads(args) + instructions
 
-        # process jr instruction
-        jrCount = self._processReturn(instructions)
-
         # allocate physical registers
-        instructions = self._getAllocatedPhysicalRegisters(instructions, jrCount=jrCount)
+        instructions = self._getAllocatedPhysicalRegisters(instructions)
 
         # insert pre calling convention
         self._insertPreCallingConvention(instructions)
 
         # insert post calling convention
-        self._insertPostCallingConvention(instructions, jrCount=jrCount)
+        self._insertPostCallingConvention(instructions)
 
         # insert function name label
         instructions.insert(0, MIPSInstruction('label', target=self.name))
@@ -67,7 +64,7 @@ class MIPSFunction():
         return len(ints.split(','))
     
     def _getArgStackLoads(self, args):
-        # params start at ra + oldFp + 8 sregs + 1 = 10 * 4 = 40
+        # params start at ra + rv + oldFp + 8 sregs + 1 = 11 * 4 = 44
         fpParamOffset = 44
         instructions = []
         for i in range(0, len(args)):
@@ -114,9 +111,9 @@ class MIPSFunction():
     def _insertPreCallingConvention(self, instructions):
         if self.name != 'main':
             preConvention = []
-            preConvention += self._getSregSaves()
-            preConvention += self._saveReg('$fp')
-            preConvention += self._saveReg('$ra')
+            preConvention += self._getSregStores()
+            preConvention += self._storeReg('$fp')
+            preConvention += self._storeReg('$ra')
             preConvention += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4) ] # dec 1 extra space
             preConvention += [ MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']) ] # set the new $fp
             i = 0
@@ -126,15 +123,20 @@ class MIPSFunction():
         else:
             instructions.insert(0, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp'])) # main still needs to set $fp
     
-    def _insertPostCallingConvention(self, instructions, jrCount=0):
+    def _insertPostCallingConvention(self, instructions):
         postConvention = []
         if self.name != 'main':
             postConvention += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4) ] # inc 1 extra space
-            postConvention += self._restoreReg('$ra')
-            postConvention += self._restoreReg('$fp')
-            postConvention += self._getSregRestores()
-            for instr in postConvention:
-                instructions.insert(-jrCount, instr)
+            postConvention += self._loadReg('$ra')
+            postConvention += self._loadReg('$fp')
+            postConvention += self._getSregLoads()
+            postConvention += [ MIPSInstruction('jr', sourceRegs=['$ra']) ]
+            if instructions[-1].op == 'jr':
+                instructions.pop(-1)
+        else:
+            postConvention += self._getSystemExit()
+        for instr in postConvention:
+            instructions.append(instr)
 
     def _getSystemExit(self):
         return [
@@ -142,29 +144,7 @@ class MIPSFunction():
             MIPSInstruction("syscall")
         ]
 
-    def _processReturn(self, instructions):
-        newInstructions = []
-        jrInstructions = None
-        for instr in instructions:
-            if instr.op == 'jr':
-                jrInstructions = parseJR(instr)
-            else:
-                newInstructions.append(instr)
-    
-        if jrInstructions == None:
-            if self.name == 'main':
-                jrInstructions = self._getSystemExit()
-            else:
-                jrInstructions = [ MIPSInstruction('jr', sourceRegs=['$ra']) ]
-                
-        
-        newInstructions += jrInstructions
-        instructions.clear()
-        for instr in newInstructions:
-            instructions.append(instr)
-        return len(jrInstructions)
-
-    def _getSregSaves(self):
+    def _getSregStores(self):
         instructions = []
         imm = 8 * -4
         instructions += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
@@ -176,7 +156,7 @@ class MIPSFunction():
             ]
         return instructions
     
-    def _getSregRestores(self):
+    def _getSregLoads(self):
         instructions = []
         imm = 8 * 4
         instructions += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm), ]
@@ -188,20 +168,20 @@ class MIPSFunction():
             ]
         return instructions
     
-    def _saveReg(self, reg):
+    def _storeReg(self, reg):
         return [
             MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4),
             MIPSInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0)
         ]
     
-    def _restoreReg(self, reg):
+    def _loadReg(self, reg):
         return [
             MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0),
             MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4)
         ]
 
-    def _getAllocatedPhysicalRegisters(self, instructions, jrCount=0, argCount=0):
-        return ra.greedyAlloc(instructions, choke=None, jrCount=jrCount, argCount=argCount)
+    def _getAllocatedPhysicalRegisters(self, instructions):
+        return ra.greedyAlloc(instructions, choke=7)
 
 class MIPSFunctionArg():
     def __init__(self, symbol, isArray=False, size=1):

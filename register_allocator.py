@@ -6,7 +6,7 @@ mipsPhysicalRegTable = {'$t':10, '$s':8}
 virutalRegRegex = re.compile(r'!?[a-zA-Z_][a-zA-Z0-9_]*')
 
 
-def greedyAlloc(instructions, argCount=0, jrCount=0, choke=None):
+def greedyAlloc(instructions, argCount=0, choke=None):
     vregs = _parseVirtualRegs(instructions)
     pregs = _getMIPSPhyicicalRegs('$t', customCount=choke) # allow for customization later
     regMap = _getAllocationMap(instructions, vregs=vregs, pregs=pregs)
@@ -19,18 +19,8 @@ def greedyAlloc(instructions, argCount=0, jrCount=0, choke=None):
         newInstructions += _mapInstruction(instruction, regMap, frameMap)
     # _setUnknownOffsets(instructions, len(vregs)) 
     _insertFrameSetup(newInstructions, regMap, argCount=argCount)
-    _insertFrameBreakDown(newInstructions, frameMap, jrCount=jrCount)
+    _insertFrameBreakDown(newInstructions, frameMap)
     return newInstructions
-
-def _setUnknownOffsets(instructions, numVregs):
-    for i in range(0, len(instructions)):
-        instr = instructions[i]
-        if type(instr.offset) == str:
-            offset = int(instr.offset[:-1])
-            offset += numVregs * 4
-            instructions[i].offset = offset
-
-
 
 # intelligent instruction mapping that handles spilled registers
 def _mapInstruction(instruction, regMap, frameMap):
@@ -40,7 +30,7 @@ def _mapInstruction(instruction, regMap, frameMap):
     mappedInstruction += _spillRegs(instruction, spillMap, regMap, frameMap)
     # hot swap
     localRegMap = _getLocalRegMap(spillMap, regMap)
-    _hotSwapInstruction(instruction, localRegMap)
+    _hotSwapInstruction(instruction, localRegMap, regMap, spillMap)
     mappedInstruction.append(instruction)
     # mop
     mappedInstruction += _mopRegs(instruction, spillMap, regMap, frameMap)
@@ -48,7 +38,7 @@ def _mapInstruction(instruction, regMap, frameMap):
     return mappedInstruction
 
 # unintelligent instruction mapping according to localRegMap
-def _hotSwapInstruction(instruction, localRegMap):
+def _hotSwapInstruction(instruction, localRegMap, regMap, spillMap):
     targetReg = instruction.targetReg
     if targetReg != None:
         if targetReg in localRegMap.keys():
@@ -107,7 +97,7 @@ def _selectSourceRegSpillVictim(instruction, spillMap, regMap):
         isNotInSourceRegs = (instruction.sourceRegs == None) or (not reg in instruction.sourceRegs)
         isNotTargetReg = (instruction.targetReg == None) or (reg != instruction.targetReg)
         isNotVictim = not (reg in spillMap.keys())
-        if isMapped and isNotInSourceRegs and isNotVictim:
+        if isMapped and isNotInSourceRegs and isNotTargetReg and isNotVictim:
             return reg
     raise AllocationException("failed to select source reg victim for instruction: {}".format(str(instruction)))
 
@@ -122,7 +112,8 @@ def _spillRegs(instruction, spillMap, regMap, frameMap):
         # optimization if spilled reg is the targetReg and doesnt appear in source regs
         isTargetReg = (instruction.targetReg != None) and (incoming == instruction.targetReg)
         notInSourceRegs = (instruction.sourceRegs == None) or (incoming not in instruction.sourceRegs)
-        if isTargetReg and notInSourceRegs:
+        isNotSW = instruction.op != 'sw'
+        if isTargetReg and notInSourceRegs and isNotSW and False:
             # no need to load anything into the target reg so we stash instead of fully swap
             newInstructions += _stashReg(victim, regMap, frameMap)
         else:
@@ -169,7 +160,7 @@ def _getFrameMap(regMap):
     frameMap = {}
     i = 0
     for reg in regMap.keys():
-        frameMap[reg] = i * 4
+        frameMap[reg] = i * -4
         i += 1
     return frameMap
 
@@ -178,9 +169,13 @@ def _insertFrameSetup(instructions, regMap, argCount=0):
     frameOffset = len(regMap.keys()) * -4
     instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
-def _insertFrameBreakDown(instructions, frameMap, jrCount=0):
-    frameOffset = len(frameMap.keys()) * 4
-    instructions.insert(-jrCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+def _insertFrameBreakDown(instructions, frameMap):
+    if len(instructions) > 0:
+        frameOffset = len(frameMap.keys()) * 4
+        if instructions[-1].op == 'jr':
+            instructions.insert(-1, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+        else:
+            instructions.append(MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
 def _getAllocationMap(instructions, vregs=None, pregs=None):
     if vregs == None:
@@ -298,7 +293,7 @@ class AllocationException(Exception):
 
 def main():
     instructions = [
-        MIPSInstruction('add')
+        MIPSInstruction('sw', targetReg='s1', sourceRegs=['s0'], offset=4)
     ]
 
     regMap = {

@@ -10,7 +10,18 @@ float-list:
     array_store, d, arr, 0
     array_store, e, arr, 1
     callr, r, arrSum, arr, 2
+    call, puti, a
+    call, putc, 10
+    call, puti, b
+    call, putc, 10
+    call, puti, c
+    call, putc, 10
+    call, puti, d
+    call, putc, 10
+    call, puti, e
+    call, putc, 10
     call, puti, r
+    call, putc, 10
 #end_function
 
 #start_function
@@ -29,6 +40,10 @@ float-list:
 void double(int x):
 int-list: c
 float-list:
-    mult, c, x, 2
-    return, c 
+    add, a, 0, 1
+    mult, b, a, x
+    add, z, x, x
+    div, y, z, 1
+    assign, c, y
+    return, y 
 #end_function

@@ -29,8 +29,7 @@ end:
 void main():
 int-list: x, y, z
 float-list:
-    callr, x, geti
-    callr, z, fib, x
+    callr, z, fib, 1
     assign, x, z
     call, puti, x
     call, putc, 10

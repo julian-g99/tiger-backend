@@ -61,23 +61,6 @@ immOpcodeParseTable = {
     'array_load'    :   None,
 }
 
-# The return function cannot be parsed before calling convention is inserted so it is put in a shell MIPSInstruction.
-# This method is used during the calling convention step to finish the parsing of the return instruction
-def parseJR(instruction):
-    sourceRegs = instruction.sourceRegs
-    imm = instruction.imm
-    if imm != None:
-        return [
-            MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-            MIPSInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0),
-            MIPSInstruction('jr', sourceRegs=['$ra'])
-        ]
-    else:
-        return [
-            MIPSInstruction('sw', targetReg='$sp', sourceRegs=sourceRegs, offset=0),
-            MIPSInstruction('jr', sourceRegs=['$ra'])
-        ]
-
 def parseLine(line):
     if _isLabel(line):
         return [ MIPSInstruction('label', target=line[:-1]) ]
@@ -298,13 +281,18 @@ def _parseReturn(tokens):
     else:
         raise ParseException("Failed to parse token: {} of tokens: {}".format(tokens[1], tokens))
     op = opcodeParseTable[tokens[0]]
+    # params start at ra + oldFp + 8 sregs + 1 = 10 * 4 = 40
+    fpOffset = 40
     if imm != None:
         return [
-            MIPSInstruction(op, imm=imm) # To be parsed into more intructions later after calling convention
+            MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
+            MIPSInstruction('sw', targetReg='$fp', sourceRegs=['!x0'], offset=fpOffset),
+            MIPSInstruction('jr', sourceRegs=['$ra'])
         ]
     else:
         return [
-            MIPSInstruction(op, sourceRegs=[regs[0]]) # To be parsed into more intructions later after calling convention
+            MIPSInstruction('sw', targetReg='$fp', sourceRegs=[regs[0]], offset=fpOffset),
+            MIPSInstruction('jr', sourceRegs=['$ra'])
         ]
 
 def _parseArrayStore(tokens):
