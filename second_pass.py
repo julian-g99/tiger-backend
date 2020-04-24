@@ -63,8 +63,8 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         A list of MCInstruction
         A dictionary map of spilled virtual register names to its location on the stack
     """
-    if not function.has_data:
-        return None
+    # if not function.has_data:
+        # return None
 
     # prologue of the calling convention
     prologue = []
@@ -162,41 +162,41 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
 
     return prologue, epilogue, offsets
 
-def instr_uses(instr: MCInstruction) -> List[str]:
-    if instr.regs is None or instr.regs == []:
-        return []
-    # only assign for now
-    triples = ["add", "addi", "addu", "addiu",
-               "sub", "subu",
-               "div", "mul",
-               "and", "andi",
-               "or", "ori",
-               "sll"]
+# def instr_uses(instr: MCInstruction) -> List[str]:
+    # if instr.regs is None or instr.regs == []:
+        # return []
+    # # only assign for now
+    # triples = ["add", "addi", "addu", "addiu",
+               # "sub", "subu",
+               # "div", "mul",
+               # "and", "andi",
+               # "or", "ori",
+               # "sll"]
 
-    doubles = ["move", "li"]
+    # doubles = ["move", "li"]
 
-    mems = ["sw", "lw"]
+    # mems = ["sw", "lw"]
 
-    branches = ["beq", "bne", "blt", "bgt", "bge", "ble", "blez"]
+    # branches = ["beq", "bne", "blt", "bgt", "bge", "ble", "blez"]
 
-    jumps = ["j", "jr"]
-
-
-    if instr.op in triples:
-        return instr.regs[1:]
-    elif instr.op in doubles:
-        return instr.regs[1:]
-    elif instr.op in mems:
-        return instr.regs
-    elif instr.op in branches:
-        return instr.regs
-    elif instr.op in jumps:
-        return instr.regs
-    else:
-        raise ValueError("unexpected instruction for instr_uses()")
+    # jumps = ["j", "jr"]
 
 
-def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
+    # if instr.op in triples:
+        # return instr.regs[1:]
+    # elif instr.op in doubles:
+        # return instr.regs[1:]
+    # elif instr.op in mems:
+        # return instr.regs
+    # elif instr.op in branches:
+        # return instr.regs
+    # elif instr.op in jumps:
+        # return instr.regs
+    # else:
+        # raise ValueError("unexpected instruction for instr_uses()")
+
+
+def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int], optimize=True) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
     """
     Performs spilling given a register map and the set of original virtual registers, with some additional information. At the end, outputs the spilling code as well as the complete register mapping (with every virtual register mapped to a physical register). Uses t0-t2 for spilling (since a single instruction should not have more than three registers).
 
@@ -228,10 +228,12 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
                 physical = reg_map[virtual]
                 if physical == "spill":
                     temp_reg = "$t%d" % curr_temp
-                    temp_needs_save = temp_reg in reg_map.values()
-                    virt_needs_load = virtual in instr_uses(instr)
-
-                    # print("instr is: {}\t reg is: {}\t needs_load: {}".format(instr, virtual, virt_needs_load))
+                    if optimize:
+                        temp_needs_save = temp_reg in reg_map.values()
+                        virt_needs_load = virtual in instr.get_uses()
+                    else:
+                        temp_needs_save = True
+                        virt_needs_load = True
 
                     if temp_needs_save:
                         prologue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
@@ -305,16 +307,11 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int], epilog
         return [instr]
     prologue = []
     epilogue = []
-    # if instr.is_call_move:
-        # arg_reg = instr.regs[0] # so far it's always the first reg
-        # prologue.append(MCInstruction("sw", regs=[arg_reg, fp], offset=offsets[arg_reg]))
-        # epilogue.append(MCInstruction("lw", regs=[arg_reg, fp], offset=offsets[arg_reg]))
     save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
 
     output += prologue
     output += save
     instr.regs = new_regs
-    # print(instr)
     output.append(instr)
     output += restore
     output += epilogue
@@ -325,6 +322,10 @@ def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tu
     load = []
     save = []
     fp = "$fp"
+
+    # pprint.pprint(reg_map)
+
+    # print(offsets)
 
     arg_pattern = re.compile(r"\$a[0123]")
 
@@ -354,13 +355,29 @@ def translate_body(function: MCFunction, offsets: Dict[str, int], epilogue, rtn)
     for k in sorted_keys:
         bb = function.bbs[k]
         reg_map = function.reg_maps[k]
+
         load, save = load_and_save_locals(reg_map, offsets)
+        if bb[0].op == "label":
+            label = bb.pop(0)
+            output.append(label)
+        # if len(bb) > 0 and (bb[-1].is_branch() or bb[-1].is_jump()):
+            # jump = bb.pop(-1)
+            # jump = convert_instr(reg_map, jump, offsets, epilogue, rtn)
+            # output += save
+            # output += jump
+
         output += load
         for instr in bb:
             if instr.op == "ret":
                 has_returned = True
+            
+            if instr.is_jump() or instr.is_branch():
+                output += save
             output += convert_instr(reg_map, instr, offsets, epilogue, rtn)
         output += save
+
+        # if jump is not None:
+            # output += jump
 
     return has_returned, output
 
@@ -394,9 +411,10 @@ def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCIn
     # prologue = get_prologue(function)
     prologue, epilogue, offsets = calling_convention(function)
 
-    # print(function.name)
-    # pp = pprint.PrettyPrinter(indent=4)
-    # pp.pprint(offsets)
+    # if function.name == "main":
+        # print(function.name)
+        # # pp = pprint.PrettyPrinter(indent=2)
+        # pprint.pprint(offsets)
 
     curr_offset = 4
     for arg in function.args[4:]:

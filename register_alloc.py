@@ -276,29 +276,56 @@ class GreedyMIPSAllocator(MIPSAllocator):
                 pregs.append(self.regMap[reg])
         return pregs
 
-    # computes the live ranges of all virtual regs
-    def _getLiveRanges(self, block):
-        lastUse = {}
-        ranges = {}
-        for vr in self.vregs:
-            lastUse[vr] = -1
-            ranges[vr] = []
-        for i in range(0, len(block)):
-            instruction = block[i]
-            _def = self._getDef(instruction)
-            if _def in self.vregs:
-                if (_def != None):
-                    self._deleteAfterLastUse(_def, lastUse[_def], ranges)
-                    lastUse[_def] = i
-                uses = self._getUses(instruction)
-                for use in uses:
-                    if use in self.vregs:
-                        lastUse[use] = i
-            for vr in self.vregs:
-                ranges[vr].append(i)
-        for vr in self.vregs:
-            self._deleteAfterLastUse(vr, lastUse[vr], ranges)
-        return ranges
+    def _parseVirtualRegs(self, instructions, regex=None):
+        if regex == None:
+            regex = re.compile(r'!?[a-zA-Z_][a-zA-Z0-9_]*')
+        vregs = []
+        for instr in instructions:
+            targetReg = instr.targetReg
+            sourceRegs = instr.sourceRegs
+            if targetReg != None:
+                if re.fullmatch(regex, targetReg) != None and targetReg not in vregs:
+                    vregs.append(targetReg)
+            if sourceRegs != None:
+                for reg in sourceRegs:
+                    if re.fullmatch(regex, reg) != None and reg not in vregs:
+                        vregs.append(reg)
+        return vregs
+
+    # computes the i+ liverange sets 
+    def _getLiveRanges(self, instructions, vregs=None):
+        if vregs == None:
+            vregs = self._parseVirtualRegs(instructions)
+        
+        # init live table
+        liveRanges = {}
+        for reg in vregs:
+            liveRanges[reg] = []
+        
+        for i in range(len(instructions)-1, -1, -1):
+            sourceRegs = instructions[i].sourceRegs
+            if sourceRegs != None:
+                for reg in sourceRegs:
+                    if reg in vregs:
+                        proposal = []
+                        j = i - 1
+                        targetReg = instructions[j].targetReg
+                        while j >= 0 and targetReg != reg:
+                            proposal.append(j)
+                            j -= 1
+                            targetReg = instructions[j].targetReg
+                        if j >= 0:
+                            proposal.append(j)
+                            self._mergeProposal(reg, proposal, liveRanges)
+
+        return liveRanges
+
+    # liverange helper method
+    def _mergeProposal(self, reg, proposal, liveRanges):
+        for pp in proposal:
+            if pp not in liveRanges[reg]:
+                liveRanges[reg].append(pp)
+
 
     # returns the virtual regs used in this instruction (according to definition of a use)
     def _getUses(self, instruction):
@@ -317,16 +344,7 @@ class GreedyMIPSAllocator(MIPSAllocator):
             return None
         else:
             return instruction.regs[0]
-    
-    # helper method used in self._getLiveRanges()
-    def _deleteAfterLastUse(self, _def, lastUse, ranges):
-        if lastUse < 0:
-            ranges[_def] = []
-            return
-        if lastUse < 0:
-            raise ValueError("def {} cannot be alive at last use {}".format(_def, lastUse))
-        delIdx = ranges[_def].index(lastUse)
-        ranges[_def] = ranges[_def][:delIdx]
+
 
 class NaiveMIPSAllocator(MIPSAllocator):
     def __init__(self, program):

@@ -1,3 +1,6 @@
+from typing import List
+
+
 RWMEM = ['lb', 'lw', 'sb', 'sw']
 branches = ['beq', 'blt', 'bgt', 'ble', 'bge', 'bne', 'blez']
 
@@ -56,3 +59,81 @@ class MCInstruction:
         if type(reg) == list:
             return [r for r in reg]
         return reg
+
+    def get_defs(self) -> List[str]:
+        if self.regs is None or self.regs == []:
+            return []
+        if self.op == "save_arg" or self.op == "restore_arg":
+            return []
+        # only assign for now
+        triples = ["add", "addi", "addu", "addiu",
+                   "sub", "subu",
+                   "div", "mul",
+                   "and", "andi",
+                   "or", "ori",
+                   "sll"]
+
+        doubles = ["move", "li"]
+
+        mems = ["sw", "lw"]
+
+        branches = ["beq", "bne", "blt", "bgt", "bge", "ble", "blez"]
+
+        jumps = ["j", "jr"]
+
+
+        if self.op in triples:
+            return self.regs[0:1]
+        elif self.op in doubles:
+            return self.regs[0:1]
+        elif self.op in mems:
+            return []
+        elif self.op in branches:
+            return []
+        elif self.op in jumps:
+            return []
+        else:
+            raise ValueError("unexpected value for get_defs()")
+
+    def get_uses(self) -> List[str]:
+        if self.regs is None or self.regs == []:
+            return []
+        if self.op == "save_arg" or self.op == "restore_arg":
+            return []
+        # only assign for now
+        triples = ["add", "addi", "addu", "addiu",
+                   "sub", "subu",
+                   "div", "mul",
+                   "and", "andi",
+                   "or", "ori",
+                   "sll"]
+
+        doubles = ["move", "li"]
+
+        mems = ["sw", "lw"]
+
+        branches = ["beq", "bne", "blt", "bgt", "bge", "ble", "blez"]
+
+        jumps = ["j", "jr"]
+
+
+        if self.op in triples:
+            return self.regs[1:]
+        elif self.op in doubles:
+            return self.regs[1:]
+        elif self.op in mems:
+            return self.regs
+        elif self.op in branches:
+            return self.regs
+        elif self.op in jumps:
+            return self.regs
+        else:
+            print(self.op)
+            raise ValueError("unexpected value for get_uses()")
+
+    def is_branch(self) -> bool:
+        return self.op in branches
+
+    def is_jump(self) -> bool:
+        return self.op == "j" # jal and jr shouldn't matter here, since they are function level
+

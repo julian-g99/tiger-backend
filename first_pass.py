@@ -87,21 +87,6 @@ def convert_arithmetic(instr: IRInstruction) -> str:
             second_op = src1
 
         output.append(MCInstruction("mul", regs=[dest, first_op, second_op]))
-
-        # if not is_constant(src0) and not is_constant(src1):
-            # output.append(MCInstruction("mul", regs=[dest, src0, src1]))
-        # elif not is_constant(src0) and is_constant(src1):
-            # output.append(MCInstruction("li", regs=[dest], imm=src1))
-            # output.append(MCInstruction("mul", regs=[dest, src0, dest]))
-        # elif is_constant(src0) and not is_constant(src1):
-            # output.append(MCInstruction("li", regs=[s_map["multiply_temporary_register"]], imm=src0))
-            # # output.append(MCInstruction("li", regs=[dest], imm=src0))
-            # output.append(MCInstruction("mult", regs=[dest, dest, src1]))
-            # output.append(MCInstruction("mult", regs=[dest, s_map["multiply_temporary_register0"], src1]))
-        # else:
-            # output.append(MCInstruction("li", regs=[s_map["multiply_temporary_register0"]], imm=src0))
-            # output.append(MCInstruction("li", regs=[s_map["multiply_temporary_register1"]], imm=src1))
-            # output.append(MCInstruction("mult", regs=[dest, s_map["multiply_temporary_register0"], s_map["multiply_temporary_register"]]))
     if instr.instruction_type == "div":
         if is_constant(src0):
             output.append(MCInstruction("li", regs=[s_map["divide_temp_reg0"]], imm=src0))
@@ -116,20 +101,6 @@ def convert_arithmetic(instr: IRInstruction) -> str:
             second_op = src1
 
         output.append(MCInstruction("div", regs=[dest, first_op, second_op]))
-
-        # if not is_constant(src0) and not is_constant(src1):
-            # output.append(MCInstruction("div", regs=[dest, src0, src1]))
-        # elif not is_constant(src0) and is_constant(src1):
-            # output.append(MCInstruction("li", regs=[dest], imm=src1))
-            # output.append(MCInstruction("div", regs=[dest, src0, dest]))
-        # elif is_constant(src0) and not is_constant(src1):
-            # output.append(MCInstruction("li", regs=[dest], imm=src0))
-            # output.append(MCInstruction("div", regs=[dest, dest, src1]))
-        # else:
-            # output.append(MCInstruction("li", regs=[dest], imm=src0))
-            # output.append(MCInstruction("li", regs=[s_map["division_temporary_register"]], imm=src1))
-            # output.append(MCInstruction("div", regs=[dest, dest, s_map["division_temporary_register"]]))
-        # # output.append(MCInstruction("mflo", regs=[dest]))
     if instr.instruction_type in ["and", "or"]:
         i_type = instr.instruction_type
         if not is_constant(src0) and not is_constant(src1):
