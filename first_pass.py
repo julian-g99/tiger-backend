@@ -213,7 +213,7 @@ def convert_array_load_store(instr):
         output.append(MCInstruction("move", regs=[s_map["array_temp_reg1"], index]))
         output.append(MCInstruction("sll", regs=[s_map["array_temp_reg1"], s_map["array_temp_reg1"]], imm=2))
         output.append(MCInstruction("addu", regs=[s_map["array_temp_reg1"], array, s_map["array_temp_reg1"]]))
-        output.append(MCInstruction(op, regs=[s_map["array_temp_reg"], s_map["array_temp_reg1"]], offset=0))
+        output.append(MCInstruction(op, regs=[s_map["array_temp_reg0"], s_map["array_temp_reg1"]], offset=0))
         del s_map["array_temp_reg0"]
         del s_map["array_temp_reg1"]
     else:
@@ -516,6 +516,8 @@ def convert_return(instr):
         output.append(MCInstruction("li", regs=[v0], imm=ret_val))
     else:
         output.append(MCInstruction("move", regs=[v0, ret_val]))
+
+    output.append(MCInstruction("ret"))
 
     return output
 

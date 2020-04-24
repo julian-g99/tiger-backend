@@ -30,10 +30,10 @@ class MCInstruction:
             return self.op
         if self.op in RWMEM:
             if self.offset:
-                return '{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
+                return '\t{} {}, {}({})'.format(self.op, self.regs[0], self.offset, self.regs[1]) 
             else:
-                return '{} {}, ({})'.format(self.op, self.regs[0], self.regs[1]) 
-        outstr = self.op
+                return '\t{} {}, ({})'.format(self.op, self.regs[0], self.regs[1]) 
+        outstr = "\t" + self.op
         if self.regs != None:
             outstr += ' ' + ', '.join(self.regs)
         if self.imm != None:

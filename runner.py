@@ -30,37 +30,38 @@ def main():
             print("\t%s" % i)
         mc_functions.append(MCFunction(name=func.name, args=func.args, int_arrs=func.int_arrs, instrs=translated))
 
-    if args.allocator == 'greedy':
-        allocator = GreedyMIPSAllocator([])
-    else:
-        allocator = NaiveMIPSAllocator([])
+    # if args.allocator == 'greedy':
+        # allocator = GreedyMIPSAllocator([])
+    # else:
+        # allocator = NaiveMIPSAllocator([])
 
-    for function in mc_functions:
-        pattern = re.compile(r"\$[stav]\d|zero|\d+")
-        allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
+    # for function in mc_functions:
+        # pattern = re.compile(r"\$[stav]\d|zero|\d+")
+        # allocator.mapMCFunction(function, target=pattern, physical='$t', regex=True)
 
-    should_print = False
-    # Continue selecting from here
-    if should_print:
-        print(".text")
-    for function in mc_functions:
-        prologue, translated_body, epilogue, rtn = parse_function(function)
-        if should_print:
-            print(function.name + ":")
-            for i in prologue:
-                print("\t%s" % i)
-            print()
+    # should_print = False
+    # # Continue selecting from here
+    # if should_print:
+        # print(".text")
+    # for function in mc_functions:
+        # prologue, translated_body, epilogue, rtn = parse_function(function)
+        # # prologue, translated_body = parse_function(function)
+        # if should_print:
+            # print(function.name + ":")
+            # for i in prologue:
+                # print("\t%s" % i)
+            # print()
 
-            for i in translated_body:
-                print("\t%s" % i)
-            print()
+            # for i in translated_body:
+                # print("\t%s" % i)
+            # print()
 
-            for i in epilogue:
-                print("\t%s" % i)
-            print()
+            # for i in epilogue:
+                # print("\t%s" % i)
+            # print()
 
-            for i in rtn:
-                print("\t%s" % i)
+            # for i in rtn:
+                # print("\t%s" % i)
 
 
 if __name__ == "__main__":

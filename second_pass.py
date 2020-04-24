@@ -275,7 +275,7 @@ def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruc
 
     return save_code, restore_code
 
-def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> List[MCInstruction]:
+def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int], epilogue, rtn) -> List[MCInstruction]:
     """
     Convert a single instruction from using virtual register to physical register. Also, if this instruction is `call` or `callr`, then it's also changed to an actual machine instruction.
     Args:
@@ -285,6 +285,10 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int]) -> Lis
     Return:
         - a list of instruction that's equivalent
     """
+
+    if instr.op == "ret":
+        return epilogue + rtn
+
     fp = "$fp"
     if instr.op == "save_arg":
         reg = instr.regs[0]
@@ -332,7 +336,7 @@ def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tu
 
     return load, save
 
-def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInstruction]:
+def translate_body(function: MCFunction, offsets: Dict[str, int], epilogue, rtn) -> Tuple[bool, List[MCInstruction]]:
     """
     Translates the body of a function one by one. Should call methods like convert_instr.
 
@@ -346,16 +350,19 @@ def translate_body(function: MCFunction, offsets: Dict[str, int]) -> List[MCInst
     output = []
     sorted_keys = list(function.bbs.keys())
     sorted_keys.sort()
+    has_returned = False
     for k in sorted_keys:
         bb = function.bbs[k]
         reg_map = function.reg_maps[k]
         load, save = load_and_save_locals(reg_map, offsets)
         output += load
         for instr in bb:
-            output += convert_instr(reg_map, instr, offsets)
+            if instr.op == "ret":
+                has_returned = True
+            output += convert_instr(reg_map, instr, offsets, epilogue, rtn)
         output += save
 
-    return output
+    return has_returned, output
 
 def return_function(function: MCFunction) -> [List[MCInstruction]]:
     output = []
@@ -398,11 +405,19 @@ def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCIn
 
     sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
     #NOTE: if the return value above is None that means it's a simple leaf
-    translated_body = translate_body(function, offsets)
-
     rtn = return_function(function)
 
-    return prologue, translated_body, epilogue, rtn
+    has_returned, translated_body = translate_body(function, offsets, epilogue, rtn)
+
+    # rtn += epilogue
+
+
+    # return prologue, translated_body, epilogue, rtn
+    if has_returned:
+        return prologue, translated_body, [], []
+    else:
+        return prologue, translated_body, epilogue, rtn
+    # return prologue, translated_body
 
 def test():
     i = 0 # using this as nop
