@@ -18,40 +18,40 @@ addi $sp, $sp, -24
 lw $t0, 52($fp)
 lw $t1, 48($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 addi $t0, $zero, 0
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 bne $t1, $t0, LABEL0
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 addi $t0, $zero, 1
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 sw $t1, -8($fp)
-lw $t1, -24($fp)
+lw $t1, -16($fp)
 move $t1, $t0
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
-sw $t1, -24($fp)
+sw $t1, -16($fp)
 lw $t1, -8($fp)
 j RET
 LABEL0:
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 addi $t0, $zero, 2
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 div $t1, $t0
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 mflo $t2
 addi $sp, $sp, -40
@@ -88,34 +88,34 @@ move $t3, $v0
 mult $t3, $t3
 mflo $t3
 sw $t0, -4($fp)
-lw $t0, -24($fp)
+lw $t0, -16($fp)
 move $t0, $t3
-sw $t0, -24($fp)
+sw $t0, -16($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 addi $t0, $zero, 2
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 sw $t0, -4($fp)
-lw $t0, -20($fp)
+lw $t0, -12($fp)
 mult $t2, $t0
-sw $t0, -20($fp)
+sw $t0, -12($fp)
 lw $t0, -4($fp)
 mflo $t2
 beq $t2, $t1, RET
 mult $t3, $t0
 mflo $t3
 sw $t0, -4($fp)
-lw $t0, -24($fp)
+lw $t0, -16($fp)
 move $t0, $t3
-sw $t0, -24($fp)
+sw $t0, -16($fp)
 lw $t0, -4($fp)
 RET:
 sw $t0, -4($fp)
-lw $t0, -24($fp)
+lw $t0, -16($fp)
 sw $t0, 44($fp)
-sw $t0, -24($fp)
+sw $t0, -16($fp)
 lw $t0, -4($fp)
 addi $sp, $sp, 24
 addi $sp, $sp, 4

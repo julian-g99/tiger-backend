@@ -12,7 +12,7 @@ def greedyAlloc(instructions, choke=None):
     regMap = _getAllocationMap(instructions, vregs=vregs, pregs=pregs)
     print(regMap)
 
-    return allocateInstructions(instructions, regMap=regMap)
+    return allocateInstructions(instructions, vregs=vregs, pregs=pregs, regMap=regMap)
 
 def allocateInstructions(instructions, regMap=None, vregs=None, pregs=None):
     if regMap == None:
@@ -85,7 +85,7 @@ def _getLocalRegMap(spillMap, regMap=None):
                 localRegMap[reg] = regMap[reg]
     return localRegMap
 
-def _getSpillMap(instruction, regMap=regMap):
+def _getSpillMap(instruction, regMap=None):
     if regMap == None:
         raise ValueError("regMap is None")
     spillMap = {}
@@ -133,7 +133,7 @@ def _selectSourceRegSpillVictim(instruction, spillMap=None, regMap=None):
             return reg
     raise AllocationException("failed to select source reg victim for instruction: {}".format(str(instruction)))
 
-def _isMapped(reg, regMap=regMap):
+def _isMapped(reg, regMap=None):
     if regMap == None:
         raise ValueError("regMap is None")
     return regMap[reg] != None
@@ -227,7 +227,7 @@ def _insertFrameSetup(instructions, regMap=None):
         raise ValueError("regMap is None")
     # Assume that the calling convention will set the value of $fp
     frameOffset = len(regMap.keys()) * -4
-    instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
+    instructions.insert(0, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
 def _insertFrameBreakDown(instructions, frameMap=None):
     if frameMap == None:
