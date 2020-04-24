@@ -6,39 +6,59 @@ mipsPhysicalRegTable = {'$t':10, '$s':8}
 virutalRegRegex = re.compile(r'!?[a-zA-Z_][a-zA-Z0-9_]*')
 
 
-def greedyAlloc(instructions, argCount=0, choke=None):
+def greedyAlloc(instructions, choke=None):
     vregs = _parseVirtualRegs(instructions)
     pregs = _getMIPSPhyicicalRegs('$t', customCount=choke) # allow for customization later
     regMap = _getAllocationMap(instructions, vregs=vregs, pregs=pregs)
     print(regMap)
 
+    return allocateInstructions(instructions, regMap=regMap)
+
+def allocateInstructions(instructions, regMap=None, vregs=None, pregs=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if vregs == None:
+        raise ValueError("vregs is None")
+    if pregs == None:
+        raise ValueError("pregs is None")
+
     newInstructions = []
-    # setup the frame and load $fp
-    frameMap = _getFrameMap(regMap)
+    frameMap = _getFrameMap(vregs)
     for instruction in instructions:
-        newInstructions += _mapInstruction(instruction, regMap, frameMap)
-    # _setUnknownOffsets(instructions, len(vregs)) 
-    _insertFrameSetup(newInstructions, regMap, argCount=argCount)
-    _insertFrameBreakDown(newInstructions, frameMap)
+        newInstructions += _mapInstruction(instruction, regMap=regMap, frameMap=frameMap)
+    _insertFrameSetup(newInstructions, regMap=regMap)
+    _insertFrameBreakDown(newInstructions, frameMap=frameMap)
     return newInstructions
 
 # intelligent instruction mapping that handles spilled registers
-def _mapInstruction(instruction, regMap, frameMap):
+def _mapInstruction(instruction, regMap=None, frameMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
+
     mappedInstruction = []
-    spillMap = _getSpillMap(instruction, regMap)
+    spillMap = _getSpillMap(instruction, regMap=regMap)
     # spill
-    mappedInstruction += _spillRegs(instruction, spillMap, regMap, frameMap)
+    mappedInstruction += _spillRegs(instruction, spillMap=spillMap, regMap=regMap, frameMap=frameMap)
     # hot swap
-    localRegMap = _getLocalRegMap(spillMap, regMap)
-    _hotSwapInstruction(instruction, localRegMap, regMap, spillMap)
+    localRegMap = _getLocalRegMap(spillMap, regMap=regMap)
+    _hotSwapInstruction(instruction, localRegMap=localRegMap, regMap=regMap, spillMap=spillMap)
     mappedInstruction.append(instruction)
     # mop
-    mappedInstruction += _mopRegs(instruction, spillMap, regMap, frameMap)
+    mappedInstruction += _mopRegs(instruction, spillMap=spillMap, regMap=regMap, frameMap=frameMap)
     
     return mappedInstruction
 
 # unintelligent instruction mapping according to localRegMap
-def _hotSwapInstruction(instruction, localRegMap, regMap, spillMap):
+def _hotSwapInstruction(instruction, localRegMap=None, regMap=None, spillMap=None):
+    if localRegMap == None:
+        raise ValueError("localRegMap is None")
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if spillMap == None:
+        raise ValueError("spillMap is None")
+
     targetReg = instruction.targetReg
     if targetReg != None:
         if targetReg in localRegMap.keys():
@@ -52,10 +72,12 @@ def _hotSwapInstruction(instruction, localRegMap, regMap, spillMap):
                 instruction.sourceRegs[i] = localRegMap[sourceReg]
 
 # this local register map will exclude any spilled registered not specified in the spillMap
-def _getLocalRegMap(spillMap, regMap):
+def _getLocalRegMap(spillMap, regMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
     localRegMap = {}
     for reg in regMap.keys():
-        if _isMapped(reg, regMap):
+        if _isMapped(reg, regMap=regMap):
             if reg in spillMap.keys():
                 localRegMap[reg] = None
                 localRegMap[spillMap[reg]] = regMap[reg]
@@ -63,37 +85,47 @@ def _getLocalRegMap(spillMap, regMap):
                 localRegMap[reg] = regMap[reg]
     return localRegMap
 
-def _getSpillMap(instruction, regMap):
+def _getSpillMap(instruction, regMap=regMap):
+    if regMap == None:
+        raise ValueError("regMap is None")
     spillMap = {}
     targetReg = instruction.targetReg
     sourceRegs = instruction.sourceRegs
     if sourceRegs != None:
         for sourceReg in sourceRegs:
-            if sourceReg in regMap.keys() and not _isMapped(sourceReg, regMap):
+            if sourceReg in regMap.keys() and not _isMapped(sourceReg, regMap=regMap):
                 if not sourceReg in spillMap.values():
-                    victim = _selectSourceRegSpillVictim(instruction, spillMap, regMap)
+                    victim = _selectSourceRegSpillVictim(instruction, spillMap=spillMap, regMap=regMap)
                     spillMap[victim] = sourceReg
     if targetReg != None and targetReg in regMap.keys():
         if not _isMapped(targetReg, regMap):
             if not targetReg in spillMap.values():
-                victim = _selectTargetRegSpillVictim(instruction, spillMap, regMap)
+                victim = _selectTargetRegSpillVictim(instruction, spillMap=spillMap, regMap=regMap)
                 spillMap[victim] = targetReg
     return spillMap
 
-def _selectTargetRegSpillVictim(instruction, spillMap, regMap):
+def _selectTargetRegSpillVictim(instruction, spillMap=None, regMap=None):
+    if spillMap == None:
+        raise ValueError("spillMap is None")
+    if regMap == None:
+        raise ValueError("regMap is None")
     # assumes there are atleast 3 available mapped virtual registers to choose from, not apart of this instruction 
     for reg in regMap.keys():
-        isMapped = _isMapped(reg, regMap)
+        isMapped = _isMapped(reg, regMap=regMap)
         isNotInSourceRegs = (instruction.sourceRegs == None) or (not reg in instruction.sourceRegs)
         isNotVictim = not (reg in spillMap.keys())
         if isMapped and isNotInSourceRegs and isNotVictim:
             return reg
     raise AllocationException("failed to select target reg victim for instruction: {}".format(str(instruction)))
 
-def _selectSourceRegSpillVictim(instruction, spillMap, regMap):
+def _selectSourceRegSpillVictim(instruction, spillMap=None, regMap=None):
+    if spillMap == None:
+        raise ValueError("spillMap is None")
+    if regMap == None:
+        raise ValueError("regMap is None")
     # assumes there are atleast 3 available mapped virtual registers to choose from, not apart of this instruction 
     for reg in regMap.keys():
-        isMapped = _isMapped(reg, regMap)
+        isMapped = _isMapped(reg, regMap=regMap)
         isNotInSourceRegs = (instruction.sourceRegs == None) or (not reg in instruction.sourceRegs)
         isNotTargetReg = (instruction.targetReg == None) or (reg != instruction.targetReg)
         isNotVictim = not (reg in spillMap.keys())
@@ -101,11 +133,19 @@ def _selectSourceRegSpillVictim(instruction, spillMap, regMap):
             return reg
     raise AllocationException("failed to select source reg victim for instruction: {}".format(str(instruction)))
 
-def _isMapped(reg, regMap):
+def _isMapped(reg, regMap=regMap):
+    if regMap == None:
+        raise ValueError("regMap is None")
     return regMap[reg] != None
 
 # pre instructions for safely clearing up physical regs for use
-def _spillRegs(instruction, spillMap, regMap, frameMap):
+def _spillRegs(instruction, spillMap=None, regMap=None, frameMap=None):
+    if spillMap == None:
+        raise ValueError("spillMap is None")
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     newInstructions = []
     for victim in spillMap.keys():
         incoming = spillMap[victim]
@@ -115,21 +155,31 @@ def _spillRegs(instruction, spillMap, regMap, frameMap):
         isNotSW = instruction.op != 'sw'
         if isTargetReg and notInSourceRegs and isNotSW and False:
             # no need to load anything into the target reg so we stash instead of fully swap
-            newInstructions += _stashReg(victim, regMap, frameMap)
+            newInstructions += _stashReg(victim, regMap=regMap, frameMap=frameMap)
         else:
-            newInstructions += _swapInReg(victim, incoming, regMap, frameMap)
+            newInstructions += _swapInReg(victim, incoming, regMap=regMap, frameMap=frameMap)
     return newInstructions
 
 # post instructions for safely restoring virtual regs to their original mapped physical regs
-def _mopRegs(instruction, spillMap, regMap, frameMap):
+def _mopRegs(instruction, spillMap=None, regMap=None, frameMap=None):
+    if spillMap == None:
+        raise ValueError("spillMap is None")
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     newInstructions = []
     for victim in spillMap.keys():
         outgoing = spillMap[victim]
-        newInstructions += _swapOutReg(victim, outgoing, regMap, frameMap)
+        newInstructions += _swapOutReg(victim, outgoing, regMap=regMap, frameMap=frameMap)
     return newInstructions
 
 # puts a victim onto the stack and loads the incoming reg into the victim's former physical reg
-def _swapInReg(victim, incoming, regMap, frameMap):
+def _swapInReg(victim, incoming, regMap=None, frameMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     physicalReg = regMap[victim]
     victimOffset = frameMap[victim]
     incomingOffset = frameMap[incoming]
@@ -139,7 +189,11 @@ def _swapInReg(victim, incoming, regMap, frameMap):
     ]
 
 # saves the outgoing reg and returns a victim from the stack back to its original physical register
-def _swapOutReg(victim, outgoing, regMap, frameMap):
+def _swapOutReg(victim, outgoing, regMap=None, frameMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     physicalReg = regMap[victim]
     victimOffset = frameMap[victim]
     outgoingOffset = frameMap[outgoing]
@@ -149,27 +203,35 @@ def _swapOutReg(victim, outgoing, regMap, frameMap):
     ]
 
 # puts saves a victim onto the stack so that its physical register can be safely overwritten
-def _stashReg(victim, regMap, frameMap):
+def _stashReg(victim, regMap=None, frameMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     physicalReg = regMap[victim]
     victimOffset = frameMap[victim]
     return [
         MIPSInstruction('sw', targetReg='$fp', sourceRegs=[physicalReg], offset=victimOffset),
     ]
 
-def _getFrameMap(regMap):
+def _getFrameMap(vregs):
     frameMap = {}
     i = 1
-    for reg in regMap.keys():
+    for reg in vregs:
         frameMap[reg] = i * -4
         i += 1
     return frameMap
 
-def _insertFrameSetup(instructions, regMap, argCount=0):
+def _insertFrameSetup(instructions, regMap=None):
+    if regMap == None:
+        raise ValueError("regMap is None")
     # Assume that the calling convention will set the value of $fp
     frameOffset = len(regMap.keys()) * -4
     instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
-def _insertFrameBreakDown(instructions, frameMap):
+def _insertFrameBreakDown(instructions, frameMap=None):
+    if frameMap == None:
+        raise ValueError("frameMap is None")
     if len(instructions) > 0:
         frameOffset = len(frameMap.keys()) * 4
         if instructions[-1].op == 'jr':
