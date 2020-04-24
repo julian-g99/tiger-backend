@@ -181,7 +181,7 @@ class MIPSFunction():
         ]
 
     def _getAllocatedPhysicalRegisters(self, instructions):
-        return ra.greedyAlloc(instructions, choke=7)
+        return ra.greedyAlloc(instructions, choke=5)
 
 class MIPSFunctionArg():
     def __init__(self, symbol, isArray=False, size=1):

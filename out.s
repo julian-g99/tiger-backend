@@ -19,27 +19,43 @@ lw $t1, 48($fp)
 addi $t4, $zero, 0
 move $t0, $t4
 addi $t4, $zero, 1
-move $t5, $t4
-sw $t0, 0($fp)
-lw $t0, -28($fp)
-move $t0, $t5
-sw $t0, -28($fp)
-lw $t0, 0($fp)
+sw $t0, -4($fp)
+lw $t0, -24($fp)
+move $t0, $t4
+sw $t0, -24($fp)
+lw $t0, -4($fp)
+sw $t0, -4($fp)
+lw $t0, -24($fp)
+sw $t1, -8($fp)
+lw $t1, -32($fp)
+move $t1, $t0
+sw $t0, -24($fp)
+lw $t0, -4($fp)
+sw $t1, -32($fp)
+lw $t1, -8($fp)
 addi $t4, $zero, 1
 sub $t4, $t1, $t4
 bgtz $t4, if_label0
 addi $t4, $zero, 0
-sw $t0, 0($fp)
-lw $t0, -32($fp)
+sw $t0, -4($fp)
+lw $t0, -36($fp)
 move $t0, $t4
-sw $t0, -32($fp)
-lw $t0, 0($fp)
-move $t5, $t1
-sw $t0, 0($fp)
-lw $t0, -28($fp)
-move $t0, $t5
-sw $t0, -28($fp)
-lw $t0, 0($fp)
+sw $t0, -36($fp)
+lw $t0, -4($fp)
+sw $t0, -4($fp)
+lw $t0, -24($fp)
+move $t0, $t1
+sw $t0, -24($fp)
+lw $t0, -4($fp)
+sw $t0, -4($fp)
+lw $t0, -24($fp)
+sw $t1, -8($fp)
+lw $t1, -32($fp)
+move $t1, $t0
+sw $t0, -24($fp)
+lw $t0, -4($fp)
+sw $t1, -32($fp)
+lw $t1, -8($fp)
 j end
 if_label0:
 addi $t4, $zero, 1
@@ -105,25 +121,45 @@ lw $t7, 28($sp)
 lw $t8, 32($sp)
 lw $t9, 36($sp)
 addi $sp, $sp, 40
-move $t6, $v0
-sw $t1, -4($fp)
+sw $t0, -4($fp)
+lw $t0, -28($fp)
+move $t0, $v0
+sw $t0, -28($fp)
+lw $t0, -4($fp)
+sw $t1, -8($fp)
+lw $t1, -36($fp)
+move $t1, $t0
+sw $t1, -36($fp)
+lw $t1, -8($fp)
+sw $t1, -8($fp)
+lw $t1, -24($fp)
+move $t1, $t0
+sw $t1, -24($fp)
+lw $t1, -8($fp)
+sw $t0, -4($fp)
+lw $t0, -28($fp)
+sw $t1, -8($fp)
+lw $t1, -24($fp)
+add $t1, $t2, $t0
+sw $t0, -28($fp)
+lw $t0, -4($fp)
+sw $t1, -24($fp)
+lw $t1, -8($fp)
+sw $t0, -4($fp)
+lw $t0, -24($fp)
+sw $t1, -8($fp)
 lw $t1, -32($fp)
 move $t1, $t0
+sw $t0, -24($fp)
+lw $t0, -4($fp)
 sw $t1, -32($fp)
-lw $t1, -4($fp)
-move $t5, $t0
-add $t5, $t2, $t6
-sw $t0, 0($fp)
-lw $t0, -28($fp)
-move $t0, $t5
-sw $t0, -28($fp)
-lw $t0, 0($fp)
+lw $t1, -8($fp)
 end:
-sw $t0, 0($fp)
-lw $t0, -28($fp)
-sw $t0, 40($fp)
-sw $t0, -28($fp)
-lw $t0, 0($fp)
+sw $t0, -4($fp)
+lw $t0, -32($fp)
+sw $t0, 44($fp)
+sw $t0, -32($fp)
+lw $t0, -4($fp)
 addi $sp, $sp, 36
 addi $sp, $sp, 4
 lw $ra, 0($sp)
@@ -142,7 +178,10 @@ lw $s0, -28($sp)
 jr $ra
 main:
 move $fp, $sp
-addi $sp, $sp, -12
+addi $sp, $sp, -8
+li $v0, 5
+syscall
+move $t0, $v0
 addi $sp, $sp, -40
 sw $t0, 0($sp)
 sw $t1, 4($sp)
@@ -155,8 +194,7 @@ sw $t7, 28($sp)
 sw $t8, 32($sp)
 sw $t9, 36($sp)
 addi $sp, $sp, -4
-addi $t1, $zero, 1
-sw $t1, 0($sp)
+sw $t0, 0($sp)
 addi $sp, $sp, -4
 jal fib
 lw $v0, 0($sp)
@@ -172,14 +210,14 @@ lw $t7, 28($sp)
 lw $t8, 32($sp)
 lw $t9, 36($sp)
 addi $sp, $sp, 40
-move $t2, $v0
-move $t0, $t2
+move $t1, $v0
+move $t0, $t1
 li $v0, 1
 move $a0, $t0
 syscall
 li $v0, 11
 la $a0, 10
 syscall
-addi $sp, $sp, 12
+addi $sp, $sp, 8
 li $v0, 10
 syscall

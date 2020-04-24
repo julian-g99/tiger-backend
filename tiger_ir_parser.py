@@ -281,8 +281,8 @@ def _parseReturn(tokens):
     else:
         raise ParseException("Failed to parse token: {} of tokens: {}".format(tokens[1], tokens))
     op = opcodeParseTable[tokens[0]]
-    # params start at ra + oldFp + 8 sregs + 1 = 10 * 4 = 40
-    fpOffset = 40
+    # params start at ra + oldFp + 8 sregs + 1 = 11 * 4 = 44
+    fpOffset = 44
     if imm != None:
         return [
             MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),

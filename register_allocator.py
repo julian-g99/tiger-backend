@@ -158,7 +158,7 @@ def _stashReg(victim, regMap, frameMap):
 
 def _getFrameMap(regMap):
     frameMap = {}
-    i = 0
+    i = 1
     for reg in regMap.keys():
         frameMap[reg] = i * -4
         i += 1
