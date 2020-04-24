@@ -1,4 +1,177 @@
 .text
+quicksort:
+		addiu $sp, $sp, -4
+		sw $fp, ($sp)
+		move $fp, $sp
+		sw $t0, -76($fp)
+		sw $t1, -80($fp)
+		sw $t2, -84($fp)
+		sw $t3, -88($fp)
+		sw $t4, -92($fp)
+		sw $t5, -96($fp)
+		sw $t6, -100($fp)
+		sw $t7, -104($fp)
+		sw $t8, -108($fp)
+		sw $t9, -112($fp)
+		sw $ra, -116($fp)
+		addiu $sp, $fp, -116
+
+		lw $t0, -44($fp)
+		lw $t1, -48($fp)
+		li $t0, 0
+		li $t1, 0
+		sw $t0, -44($fp)
+		sw $t1, -48($fp)
+		bge $a1, $a2, quicksort_end
+		sw $t0, -44($fp)
+		sw $t1, -48($fp)
+		lw $t0, -24($fp)
+		lw $t1, -56($fp)
+		lw $t2, -20($fp)
+		lw $t3, -60($fp)
+		lw $t4, -44($fp)
+		lw $t5, -48($fp)
+		add $t1, $a1, $a2
+		li $t2, 2
+		div $t1, $t1, $t2
+		move $t0, $t1
+		sll $t0, $t0, 2
+		addu $t0, $a0, $t0
+		lw $t3, ($t0)
+		addi $t4, $a1, -1
+		addi $t5, $a2, 1
+		sw $t0, -24($fp)
+		sw $t1, -56($fp)
+		sw $t2, -20($fp)
+		sw $t3, -60($fp)
+		sw $t4, -44($fp)
+		sw $t5, -48($fp)
+	quicksort_loop0:
+	quicksort_loop1:
+		lw $t0, -28($fp)
+		lw $t1, -72($fp)
+		lw $t2, -44($fp)
+		lw $t3, -64($fp)
+		lw $t4, -60($fp)
+		addi $t2, $t2, 1
+		move $t0, $t2
+		sll $t0, $t0, 2
+		addu $t0, $a0, $t0
+		lw $t1, ($t0)
+		move $t3, $t1
+		sw $t0, -28($fp)
+		sw $t1, -72($fp)
+		sw $t2, -44($fp)
+		sw $t3, -64($fp)
+		sw $t4, -60($fp)
+		blt $t3, $t4, quicksort_loop1
+		sw $t0, -28($fp)
+		sw $t1, -72($fp)
+		sw $t2, -44($fp)
+		sw $t3, -64($fp)
+		sw $t4, -60($fp)
+	quicksort_loop2:
+		lw $t0, -32($fp)
+		lw $t1, -72($fp)
+		lw $t2, -68($fp)
+		lw $t3, -48($fp)
+		lw $t4, -60($fp)
+		addi $t3, $t3, -1
+		move $t0, $t3
+		sll $t0, $t0, 2
+		addu $t0, $a0, $t0
+		lw $t1, ($t0)
+		move $t2, $t1
+		sw $t0, -32($fp)
+		sw $t1, -72($fp)
+		sw $t2, -68($fp)
+		sw $t3, -48($fp)
+		sw $t4, -60($fp)
+		bgt $t2, $t4, quicksort_loop2
+		sw $t0, -32($fp)
+		sw $t1, -72($fp)
+		sw $t2, -68($fp)
+		sw $t3, -48($fp)
+		sw $t4, -60($fp)
+		lw $t0, -44($fp)
+		lw $t1, -48($fp)
+		sw $t0, -44($fp)
+		sw $t1, -48($fp)
+		bge $t0, $t1, quicksort_exit0
+		sw $t0, -44($fp)
+		sw $t1, -48($fp)
+		lw $t0, -40($fp)
+		lw $t1, -36($fp)
+		lw $t2, -68($fp)
+		lw $t3, -44($fp)
+		lw $t4, -64($fp)
+		lw $t5, -48($fp)
+		move $t1, $t5
+		sll $t1, $t1, 2
+		addu $t1, $a0, $t1
+		sw $t4, ($t1)
+		move $t0, $t3
+		sll $t0, $t0, 2
+		addu $t0, $a0, $t0
+		sw $t2, ($t0)
+		sw $t0, -40($fp)
+		sw $t1, -36($fp)
+		sw $t2, -68($fp)
+		sw $t3, -44($fp)
+		sw $t4, -64($fp)
+		sw $t5, -48($fp)
+		j quicksort_loop0
+		sw $t0, -40($fp)
+		sw $t1, -36($fp)
+		sw $t2, -68($fp)
+		sw $t3, -44($fp)
+		sw $t4, -64($fp)
+		sw $t5, -48($fp)
+	quicksort_exit0:
+		lw $t0, -48($fp)
+		lw $t1, -52($fp)
+		addi $t1, $t0, 1
+		sw $a0, -4($fp)
+		sw $a1, -8($fp)
+		sw $a2, -12($fp)
+		move $a0, $a0
+		move $a1, $a1
+		move $a2, $t0
+		jal quicksort
+		lw $a0, -4($fp)
+		lw $a1, -8($fp)
+		lw $a2, -12($fp)
+		addi $t0, $t0, 1
+		sw $a0, -4($fp)
+		sw $a1, -8($fp)
+		sw $a2, -12($fp)
+		move $a0, $a0
+		move $a1, $t0
+		move $a2, $a2
+		jal quicksort
+		lw $a0, -4($fp)
+		lw $a1, -8($fp)
+		lw $a2, -12($fp)
+		sw $t0, -48($fp)
+		sw $t1, -52($fp)
+	quicksort_end:
+
+		lw $ra, -116($fp)
+		lw $t0, -76($fp)
+		lw $t1, -80($fp)
+		lw $t2, -84($fp)
+		lw $t3, -88($fp)
+		lw $t4, -92($fp)
+		lw $t5, -96($fp)
+		lw $t6, -100($fp)
+		lw $t7, -104($fp)
+		lw $t8, -108($fp)
+		lw $t9, -112($fp)
+		move $sp, $fp
+		lw $fp, ($sp)
+		addiu $sp, $sp, 4
+
+		jr $ra
 main:
 		addiu $sp, $sp, -4
 		sw $fp, ($sp)
@@ -7,382 +180,104 @@ main:
 		li $a0, 400
 		syscall
 		sw $v0, -20($fp)
-		li $v0, 9
-		li $a0, 4000
-		syscall
-		sw $v0, -24($fp)
-		li $v0, 9
-		li $a0, 400
-		syscall
-		sw $v0, -28($fp)
-		li $v0, 9
-		li $a0, 400
-		syscall
-		sw $v0, -32($fp)
-		sw $t0, -156($fp)
-		sw $t1, -160($fp)
-		sw $t2, -164($fp)
-		sw $t3, -168($fp)
-		sw $t4, -172($fp)
-		sw $t5, -176($fp)
-		sw $t6, -180($fp)
-		sw $t7, -184($fp)
-		sw $t8, -188($fp)
-		sw $t9, -192($fp)
-		addiu $sp, $fp, -196
-
-		li $t0, 100
-		sw $t0, -40($fp)
-		lw $t1, -20($fp)
-		move $t0, $t1
-		sw $t0, -44($fp)
-		sw $t1, -20($fp)
-		li $t0, 0
-		sw $t0, -84($fp)
-	main_array_assign_loop0:
-		lw $t0, -40($fp)
-		blez $t0, main_array_assign_end0
-		sw $t0, -40($fp)
-		lw $t0, -84($fp)
-		lw $t1, -44($fp)
-		sw $t0, ($t1)
-		sw $t0, -84($fp)
-		sw $t1, -44($fp)
-		lw $t0, -40($fp)
-		addi $t0, $t0, -1
-		sw $t0, -40($fp)
-		lw $t0, -44($fp)
-		addiu $t0, $t0, 4
-		sw $t0, -44($fp)
-		j main_array_assign_loop0
-	main_array_assign_end0:
-		li $t0, 10
-		sw $t0, -124($fp)
-		li $t0, 0
-		sw $t0, -136($fp)
-		li $v0, 5
-		syscall
-		move $t0, $v0
-		sw $t0, -128($fp)
-		li $t0, 0
-		sw $t0, -108($fp)
-	main_L0:
-		lw $t0, -108($fp)
-		lw $t1, -128($fp)
-		bge $t0, $t1, main_EOI
-		sw $t0, -108($fp)
-		sw $t1, -128($fp)
-		li $v0, 5
-		syscall
-		move $t0, $v0
-		sw $t0, -36($fp)
-		lw $t1, -108($fp)
-		move $t0, $t1
-		sw $t0, -92($fp)
-		sw $t1, -108($fp)
-		lw $t0, -92($fp)
-		sll $t0, $t0, 2
-		sw $t0, -92($fp)
-		lw $t0, -92($fp)
-		lw $t1, -28($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -92($fp)
-		sw $t1, -28($fp)
-		lw $t0, -36($fp)
-		lw $t1, -92($fp)
-		sw $t0, ($t1)
-		sw $t0, -36($fp)
-		sw $t1, -92($fp)
-		li $t0, 0
-		sw $t0, -116($fp)
-	main_L1:
-		lw $t0, -116($fp)
-		lw $t1, -36($fp)
-		bge $t0, $t1, main_L2
-		sw $t0, -116($fp)
-		sw $t1, -36($fp)
-		li $v0, 5
-		syscall
-		move $t0, $v0
-		sw $t0, -152($fp)
-		lw $t1, -124($fp)
-		lw $t2, -108($fp)
-		mul $t0, $t1, $t2
-		sw $t0, -140($fp)
-		sw $t1, -124($fp)
-		sw $t2, -108($fp)
-		lw $t0, -140($fp)
-		lw $t1, -116($fp)
-		add $t0, $t0, $t1
-		sw $t0, -140($fp)
-		sw $t1, -116($fp)
-		lw $t1, -140($fp)
-		move $t0, $t1
-		sw $t0, -96($fp)
-		sw $t1, -140($fp)
-		lw $t0, -96($fp)
-		sll $t0, $t0, 2
-		sw $t0, -96($fp)
-		lw $t0, -96($fp)
-		lw $t1, -24($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -96($fp)
-		sw $t1, -24($fp)
-		lw $t0, -152($fp)
-		lw $t1, -96($fp)
-		sw $t0, ($t1)
-		sw $t0, -152($fp)
-		sw $t1, -96($fp)
-		lw $t0, -116($fp)
-		addi $t0, $t0, 1
-		sw $t0, -116($fp)
-		j main_L1
-	main_L2:
-		lw $t0, -108($fp)
-		addi $t0, $t0, 1
-		sw $t0, -108($fp)
-		j main_L0
-	main_EOI:
-		li $t0, 1
-		sw $t0, -100($fp)
-		lw $t0, -100($fp)
-		lw $t1, -20($fp)
-		sw $t0, ($t1)
-		sw $t0, -100($fp)
-		sw $t1, -20($fp)
-		li $t0, 0
-		sw $t0, -104($fp)
-		lw $t0, -104($fp)
-		lw $t1, -32($fp)
-		sw $t0, ($t1)
-		sw $t0, -104($fp)
-		sw $t1, -32($fp)
-		lw $t0, -144($fp)
-		lw $t1, -20($fp)
-		lw $t0, ($t1)
-		sw $t0, -144($fp)
-		sw $t1, -20($fp)
-		li $t0, 0
-		sw $t0, -112($fp)
-		lw $t1, -112($fp)
-		move $t0, $t1
-		sw $t0, -108($fp)
-		sw $t1, -112($fp)
-		li $t0, 1
-		sw $t0, -116($fp)
-	main_L3:
-		lw $t0, -108($fp)
-		lw $t1, -116($fp)
-		beq $t0, $t1, main_FIN
-		sw $t0, -108($fp)
-		sw $t1, -116($fp)
-		lw $t1, -108($fp)
-		move $t0, $t1
 		sw $t0, -48($fp)
-		sw $t1, -108($fp)
-		lw $t0, -48($fp)
-		sll $t0, $t0, 2
-		sw $t0, -48($fp)
-		lw $t0, -48($fp)
-		lw $t1, -32($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -48($fp)
-		sw $t1, -32($fp)
-		lw $t0, -132($fp)
-		lw $t1, -48($fp)
-		lw $t0, ($t1)
-		sw $t0, -132($fp)
-		sw $t1, -48($fp)
-		lw $t1, -108($fp)
-		addi $t0, $t1, 1
-		sw $t0, -112($fp)
-		sw $t1, -108($fp)
-		lw $t1, -112($fp)
-		move $t0, $t1
-		sw $t0, -108($fp)
-		sw $t1, -112($fp)
-		lw $t1, -132($fp)
-		move $t0, $t1
-		sw $t0, -52($fp)
-		sw $t1, -132($fp)
-		lw $t0, -52($fp)
-		sll $t0, $t0, 2
-		sw $t0, -52($fp)
-		lw $t0, -52($fp)
-		lw $t1, -28($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -52($fp)
-		sw $t1, -28($fp)
-		lw $t0, -36($fp)
-		lw $t1, -52($fp)
-		lw $t0, ($t1)
-		sw $t0, -36($fp)
 		sw $t1, -52($fp)
-		lw $t1, -108($fp)
-		move $t0, $t1
-		sw $t0, -120($fp)
-		sw $t1, -108($fp)
+		sw $t2, -56($fp)
+		sw $t3, -60($fp)
+		sw $t4, -64($fp)
+		sw $t5, -68($fp)
+		sw $t6, -72($fp)
+		sw $t7, -76($fp)
+		sw $t8, -80($fp)
+		sw $t9, -84($fp)
+		addiu $sp, $fp, -84
+
+		lw $t0, -24($fp)
+		lw $t1, -40($fp)
+		lw $t2, -44($fp)
+		li $t2, 0
+		li $v0, 5
+		syscall
+		move $t1, $v0
+		li $t0, 100
+		sw $t0, -24($fp)
+		sw $t1, -40($fp)
+		sw $t2, -44($fp)
+		bgt $t1, $t0, main_return
+		sw $t0, -24($fp)
+		sw $t1, -40($fp)
+		sw $t2, -44($fp)
+		lw $t0, -36($fp)
+		lw $t1, -40($fp)
+		addi $t1, $t1, -1
 		li $t0, 0
-		sw $t0, -120($fp)
-	main_L4:
-		lw $t0, -120($fp)
+		sw $t0, -36($fp)
+		sw $t1, -40($fp)
+	main_loop0:
+		lw $t0, -36($fp)
+		lw $t1, -40($fp)
+		sw $t0, -36($fp)
+		sw $t1, -40($fp)
+		bgt $t0, $t1, main_exit0
+		sw $t0, -36($fp)
+		sw $t1, -40($fp)
+		lw $t0, -28($fp)
+		lw $t1, -44($fp)
+		lw $t2, -36($fp)
+		lw $t3, -20($fp)
+		li $v0, 5
+		syscall
+		move $t1, $v0
+		move $t0, $t2
+		sll $t0, $t0, 2
+		addu $t0, $t3, $t0
+		sw $t1, ($t0)
+		addi $t2, $t2, 1
+		sw $t0, -28($fp)
+		sw $t1, -44($fp)
+		sw $t2, -36($fp)
+		sw $t3, -20($fp)
+		j main_loop0
+		sw $t0, -28($fp)
+		sw $t1, -44($fp)
+		sw $t2, -36($fp)
+		sw $t3, -20($fp)
+	main_exit0:
+		lw $t0, -20($fp)
 		lw $t1, -36($fp)
-		bge $t0, $t1, main_L5
-		sw $t0, -120($fp)
-		sw $t1, -36($fp)
-		lw $t1, -120($fp)
-		move $t0, $t1
-		sw $t0, -140($fp)
-		sw $t1, -120($fp)
-		lw $t1, -124($fp)
-		lw $t2, -132($fp)
-		mul $t0, $t1, $t2
-		sw $t0, -140($fp)
-		sw $t1, -124($fp)
-		sw $t2, -132($fp)
-		lw $t0, -140($fp)
-		lw $t1, -120($fp)
-		add $t0, $t0, $t1
-		sw $t0, -140($fp)
-		sw $t1, -120($fp)
-		lw $t1, -140($fp)
-		move $t0, $t1
-		sw $t0, -56($fp)
-		sw $t1, -140($fp)
-		lw $t0, -56($fp)
-		sll $t0, $t0, 2
-		sw $t0, -56($fp)
-		lw $t0, -56($fp)
-		lw $t1, -24($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -56($fp)
-		sw $t1, -24($fp)
-		lw $t0, -152($fp)
-		lw $t1, -56($fp)
-		lw $t0, ($t1)
-		sw $t0, -152($fp)
-		sw $t1, -56($fp)
-		lw $t1, -152($fp)
-		move $t0, $t1
-		sw $t0, -60($fp)
-		sw $t1, -152($fp)
-		lw $t0, -60($fp)
-		sll $t0, $t0, 2
-		sw $t0, -60($fp)
-		lw $t0, -60($fp)
-		lw $t1, -20($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -60($fp)
-		sw $t1, -20($fp)
-		lw $t0, -148($fp)
-		lw $t1, -60($fp)
-		lw $t0, ($t1)
-		sw $t0, -148($fp)
-		sw $t1, -60($fp)
-		li $t0, 1
-		sw $t0, -64($fp)
-		lw $t0, -148($fp)
-		lw $t1, -64($fp)
-		beq $t0, $t1, main_L6
-		sw $t0, -148($fp)
-		sw $t1, -64($fp)
-		li $t0, 1
-		sw $t0, -68($fp)
-		lw $t1, -152($fp)
-		move $t0, $t1
-		sw $t0, -72($fp)
-		sw $t1, -152($fp)
-		lw $t0, -72($fp)
-		sll $t0, $t0, 2
-		sw $t0, -72($fp)
-		lw $t0, -72($fp)
-		lw $t1, -20($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -72($fp)
-		sw $t1, -20($fp)
-		lw $t0, -68($fp)
-		lw $t1, -72($fp)
-		sw $t0, ($t1)
-		sw $t0, -68($fp)
-		sw $t1, -72($fp)
-		lw $t1, -116($fp)
-		move $t0, $t1
-		sw $t0, -76($fp)
-		sw $t1, -116($fp)
-		lw $t0, -76($fp)
-		sll $t0, $t0, 2
-		sw $t0, -76($fp)
-		lw $t0, -76($fp)
-		lw $t1, -32($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -76($fp)
-		sw $t1, -32($fp)
-		lw $t0, -152($fp)
-		lw $t1, -76($fp)
-		sw $t0, ($t1)
-		sw $t0, -152($fp)
-		sw $t1, -76($fp)
-		lw $t1, -152($fp)
-		move $t0, $t1
-		sw $t0, -80($fp)
-		sw $t1, -152($fp)
-		lw $t0, -80($fp)
-		sll $t0, $t0, 2
-		sw $t0, -80($fp)
-		lw $t0, -80($fp)
-		lw $t1, -20($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -80($fp)
-		sw $t1, -20($fp)
-		lw $t0, -144($fp)
-		lw $t1, -80($fp)
-		lw $t0, ($t1)
-		sw $t0, -144($fp)
-		sw $t1, -80($fp)
-		lw $t0, -116($fp)
-		addi $t0, $t0, 1
-		sw $t0, -116($fp)
-	main_L6:
-		lw $t0, -120($fp)
-		addi $t0, $t0, 1
-		sw $t0, -120($fp)
-		j main_L4
-	main_L5:
-		j main_L3
-	main_FIN:
-		li $t0, 0
-		sw $t0, -112($fp)
-		lw $t1, -112($fp)
-		move $t0, $t1
-		sw $t0, -108($fp)
-		sw $t1, -112($fp)
-	main_L7:
-		lw $t0, -108($fp)
-		lw $t1, -116($fp)
-		beq $t0, $t1, main_L8
-		sw $t0, -108($fp)
-		sw $t1, -116($fp)
-		lw $t1, -108($fp)
-		move $t0, $t1
-		sw $t0, -88($fp)
-		sw $t1, -108($fp)
-		lw $t0, -88($fp)
-		sll $t0, $t0, 2
-		sw $t0, -88($fp)
-		lw $t0, -88($fp)
-		lw $t1, -32($fp)
-		addu $t0, $t1, $t0
-		sw $t0, -88($fp)
-		sw $t1, -32($fp)
-		lw $t0, -152($fp)
-		lw $t1, -88($fp)
-		lw $t0, ($t1)
-		sw $t0, -152($fp)
-		sw $t1, -88($fp)
+		lw $t2, -40($fp)
 		sw $a0, -4($fp)
-		lw $t0, -152($fp)
+		sw $a1, -8($fp)
+		sw $a2, -12($fp)
 		move $a0, $t0
-		sw $t0, -152($fp)
+		li $a1, 0
+		move $a2, $t2
+		jal quicksort
+		lw $a0, -4($fp)
+		lw $a1, -8($fp)
+		lw $a2, -12($fp)
+		li $t1, 0
+		sw $t0, -20($fp)
+		sw $t1, -36($fp)
+		sw $t2, -40($fp)
+	main_loop1:
+		lw $t0, -36($fp)
+		lw $t1, -40($fp)
+		sw $t0, -36($fp)
+		sw $t1, -40($fp)
+		bgt $t0, $t1, main_exit1
+		sw $t0, -36($fp)
+		sw $t1, -40($fp)
+		lw $t0, -32($fp)
+		lw $t1, -44($fp)
+		lw $t2, -36($fp)
+		lw $t3, -20($fp)
+		move $t0, $t2
+		sll $t0, $t0, 2
+		addu $t0, $t3, $t0
+		lw $t1, ($t0)
+		sw $a0, -4($fp)
+		move $a0, $t1
 		li $v0, 1
 		syscall
 		lw $a0, -4($fp)
@@ -391,27 +286,29 @@ main:
 		li $v0, 11
 		syscall
 		lw $a0, -4($fp)
-		lw $t1, -108($fp)
-		addi $t0, $t1, 1
-		sw $t0, -112($fp)
-		sw $t1, -108($fp)
-		lw $t1, -112($fp)
-		move $t0, $t1
-		sw $t0, -108($fp)
-		sw $t1, -112($fp)
-		j main_L7
-	main_L8:
+		addi $t2, $t2, 1
+		sw $t0, -32($fp)
+		sw $t1, -44($fp)
+		sw $t2, -36($fp)
+		sw $t3, -20($fp)
+		j main_loop1
+		sw $t0, -32($fp)
+		sw $t1, -44($fp)
+		sw $t2, -36($fp)
+		sw $t3, -20($fp)
+	main_exit1:
+	main_return:
 
-		lw $t0, -156($fp)
-		lw $t1, -160($fp)
-		lw $t2, -164($fp)
-		lw $t3, -168($fp)
-		lw $t4, -172($fp)
-		lw $t5, -176($fp)
-		lw $t6, -180($fp)
-		lw $t7, -184($fp)
-		lw $t8, -188($fp)
-		lw $t9, -192($fp)
+		lw $t0, -48($fp)
+		lw $t1, -52($fp)
+		lw $t2, -56($fp)
+		lw $t3, -60($fp)
+		lw $t4, -64($fp)
+		lw $t5, -68($fp)
+		lw $t6, -72($fp)
+		lw $t7, -76($fp)
+		lw $t8, -80($fp)
+		lw $t9, -84($fp)
 		move $sp, $fp
 		lw $fp, ($sp)
 		addiu $sp, $sp, 4

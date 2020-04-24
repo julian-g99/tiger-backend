@@ -1,6 +1,5 @@
 from parser import parse_instructions
 from first_pass import find_functions, instr_to_asm
-# from register_alloc import NaiveMIPSAllocator, GreedyMIPSAllocator
 from allocator import get_live_ranges, NaiveAllocator, LocalAllocator
 from second_pass import parse_function
 import argparse

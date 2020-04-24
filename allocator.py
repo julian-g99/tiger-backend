@@ -1,4 +1,5 @@
 from typing import List, Tuple
+from collections import OrderedDict
 import functools
 from mc_instruction import MCInstruction
 from mc_function import MCFunction
@@ -7,7 +8,8 @@ import re
 from pprint import PrettyPrinter
 
 def convert_map(temp_map):
-    reg_map = {}
+    # reg_map = {}
+    reg_map = OrderedDict()
     for phys, virts in temp_map.items():
         for virt in virts:
             reg_map[virt] = phys
@@ -96,8 +98,10 @@ def get_live_ranges(instrs: List[MCInstruction], args):
     # NOTE: here the index is right before the instruction (program point)
     regs = get_regs_from_instructions(instrs, args)
 
-    uses = {}
-    defs = {}
+    # uses = {}
+    # defs = {}
+    uses = OrderedDict()
+    defs = OrderedDict()
 
     for i, instr in enumerate(instrs):
         if instr.regs is not None:
