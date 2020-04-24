@@ -19,7 +19,6 @@ def greedyAlloc(instructions, argCount=0, jrCount=0, choke=None):
         newInstructions += _mapInstruction(instruction, regMap, frameMap)
     # _setUnknownOffsets(instructions, len(vregs)) 
     _insertFrameSetup(newInstructions, regMap, argCount=argCount)
-    print(jrCount)
     _insertFrameBreakDown(newInstructions, frameMap, jrCount=jrCount)
     return newInstructions
 
@@ -31,10 +30,7 @@ def _setUnknownOffsets(instructions, numVregs):
             offset += numVregs * 4
             instructions[i].offset = offset
 
-def _insertFrameSetup(instructions, regMap, argCount=0):
-    frameOffset = len(regMap.keys()) * -4
-    instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
-    instructions.insert(argCount+1, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']))
+
 
 # intelligent instruction mapping that handles spilled registers
 def _mapInstruction(instruction, regMap, frameMap):
@@ -176,6 +172,11 @@ def _getFrameMap(regMap):
         frameMap[reg] = i * 4
         i += 1
     return frameMap
+
+def _insertFrameSetup(instructions, regMap, argCount=0):
+    # Assume that the calling convention will set the value of $fp
+    frameOffset = len(regMap.keys()) * -4
+    instructions.insert(argCount, MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=frameOffset))
 
 def _insertFrameBreakDown(instructions, frameMap, jrCount=0):
     frameOffset = len(frameMap.keys()) * 4

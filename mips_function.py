@@ -30,11 +30,10 @@ class MIPSFunction():
         jrCount = self._processReturn(instructions)
 
         # allocate physical registers
-        argCount = len(args)
-        instructions = self._getAllocatedPhysicalRegisters(instructions, argCount=argCount, jrCount=jrCount)
+        instructions = self._getAllocatedPhysicalRegisters(instructions, jrCount=jrCount)
 
         # insert pre calling convention
-        self._insertPreCallingConvention(instructions, argCount=argCount)
+        self._insertPreCallingConvention(instructions)
 
         # insert post calling convention
         self._insertPostCallingConvention(instructions, jrCount=jrCount)
@@ -67,13 +66,14 @@ class MIPSFunction():
             return 0
         return len(ints.split(','))
     
-    # assumes the current stack pointer is point at the return value.
     def _getArgStackLoads(self, args):
+        # params start at ra + oldFp + 8 sregs + 1 = 10 * 4 = 40
+        fpParamOffset = 44
         instructions = []
         for i in range(0, len(args)):
             arg = args[i]
-            offset = (len(args) - i) * 4
-            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$sp'], offset=offset))
+            offset = fpParamOffset + (len(args) - i) * 4
+            instructions.append(MIPSInstruction('lw', targetReg=arg, sourceRegs=['$fp'], offset=offset))
         return instructions
         
     def _parseTigerIRLocalArrays(self, lines):
@@ -111,20 +111,25 @@ class MIPSFunction():
             arrayArgs.append(MIPSFunctionArg(symbol, isArray=True, size=size))
         return arrayArgs
     
-    def _insertPreCallingConvention(self, instructions, argCount=0):
+    def _insertPreCallingConvention(self, instructions):
         if self.name != 'main':
             preConvention = []
             preConvention += self._getSregSaves()
             preConvention += self._saveReg('$fp')
             preConvention += self._saveReg('$ra')
+            preConvention += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=-4) ] # dec 1 extra space
+            preConvention += [ MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp']) ] # set the new $fp
             i = 0
             for instr in preConvention:
-                instructions.insert(argCount+i, instr)
+                instructions.insert(i, instr)
                 i+=1
+        else:
+            instructions.insert(0, MIPSInstruction('move', targetReg='$fp', sourceRegs=['$sp'])) # main still needs to set $fp
     
     def _insertPostCallingConvention(self, instructions, jrCount=0):
         postConvention = []
         if self.name != 'main':
+            postConvention += [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=4) ] # inc 1 extra space
             postConvention += self._restoreReg('$ra')
             postConvention += self._restoreReg('$fp')
             postConvention += self._getSregRestores()
@@ -196,7 +201,7 @@ class MIPSFunction():
         ]
 
     def _getAllocatedPhysicalRegisters(self, instructions, jrCount=0, argCount=0):
-        return ra.greedyAlloc(instructions, choke=9, jrCount=jrCount, argCount=argCount)
+        return ra.greedyAlloc(instructions, choke=None, jrCount=jrCount, argCount=argCount)
 
 class MIPSFunctionArg():
     def __init__(self, symbol, isArray=False, size=1):

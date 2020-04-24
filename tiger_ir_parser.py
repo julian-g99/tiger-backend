@@ -342,6 +342,8 @@ def _parseCall(tokens):
     funcName = tokens[1]
     if funcName in intrinsics:
         return _parseIntrinsic(funcName, tokens[-1])
+    # store tregs
+    instructions += _getTRegStores()
     # save args
     for t in tokens[2:]: # start at first arg
         instructions += _getStackAlloc(1)
@@ -357,6 +359,8 @@ def _parseCall(tokens):
     # pop args
     instructions += _getStackPop(len(tokens) - 2)
     return instructions
+    # load tregs
+    instructions += _getTRegLoads()
 
 # includes some calling convention
 def _parseCallr(tokens):
@@ -366,6 +370,8 @@ def _parseCallr(tokens):
     if funcName in intrinsics:
         return _parseIntrinsic(funcName, returnReg)
     instructions = []
+    # store tregs
+    instructions += _getTRegStores()
     # save args
     for t in tokens[3:]: # start at first arg
         instructions += _getStackAlloc(1)
@@ -380,9 +386,12 @@ def _parseCallr(tokens):
     # jump and link
     instructions.append(MIPSInstruction(op, target=funcName))
     # get return value
-    instructions += _getRegLoad(returnReg)
+    instructions += _getRegLoad('$v0')
     # pop return value and args
     instructions += _getStackPop(len(tokens) - 3 + 1)
+    # load tregs
+    instructions += _getTRegLoads()
+    instructions.append(MIPSInstruction('move', targetReg=returnReg, sourceRegs=['$v0']))
     return instructions
 
 def _parseIntrinsic(funcName, token):
@@ -434,21 +443,41 @@ def _parseIntrinsic(funcName, token):
     else:
         raise ParseException('encountered unrecognized intrinsic: {}'.format(funcName))
 
+def _getTRegStores():
+    numTregs = 10
+    stores = []
+    stores += _getStackAlloc(numTregs)
+    for i in range(0, numTregs):
+        treg = '$t' + str(i)
+        offset = i * 4
+        stores += _getRegStore(treg, offset=offset)
+    return stores
+
+def _getTRegLoads():
+    numTregs = 10
+    loads = []
+    for i in range(0, numTregs):
+        treg = '$t' + str(i)
+        offset = i * 4
+        loads += _getRegLoad(treg, offset=offset)
+    loads += _getStackPop(10)
+    return loads
+
 def _getStackAlloc(amount):
         imm = amount * -4
         return [ MIPSInstruction('addi', targetReg='$sp', sourceRegs=['$sp'], imm=imm) ]
 
-def _getImmStore(imm):
+def _getImmStore(imm, offset=0):
     return [
         MIPSInstruction('addi', targetReg='!x0', sourceRegs=['$zero'], imm=imm),
-        MIPSInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=0)
+        MIPSInstruction('sw', targetReg='$sp', sourceRegs=['!x0'], offset=offset)
     ]
 
-def _getRegStore(reg):
-        return [ MIPSInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=0) ]
+def _getRegStore(reg, offset=0):
+        return [ MIPSInstruction('sw', targetReg='$sp', sourceRegs=[reg], offset=offset) ]
 
-def _getRegLoad(reg):
-        return [ MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=0) ]
+def _getRegLoad(reg, offset=0):
+        return [ MIPSInstruction('lw', targetReg=reg, sourceRegs=['$sp'], offset=offset) ]
 
 def _getStackPop(amount):
     imm = amount * 4
