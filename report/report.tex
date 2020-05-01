@@ -1,0 +1,353 @@
+\documentclass[letterpaper,12pt]{article}
+\usepackage{tabularx} % extra features for tabular environment
+\usepackage{amsmath,amssymb,amsthm}  % improve math presentation
+\usepackage{graphicx} % takes care of graphic including machinery
+\usepackage[margin=1in,letterpaper]{geometry} % decreases margins
+\usepackage{cite} % takes care of citations
+\usepackage[final]{hyperref} % adds hyper links inside the generated pdf file
+\usepackage{enumitem}
+\usepackage{graphicx}
+\graphicspath{ {./resources/} }
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{seqsplit}
+\usepackage[ruled, vlined]{algorithm2e}
+
+\theoremstyle{definition}
+\newtheorem{problem}{Problem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+
+\begin{document}
+    \title{CS 4240 Project 2: Back End}
+    \author{Chengming Gu}
+    \maketitle
+
+    \begin{section}{Logistics Clarification}
+        As mentioned already in a private piazza post and email, this project was originally meant to be done together with Paul Gibert, a fellow student in the class. We decided to part ways at the end. The only file in my submission that Paul took part is is the \textit{mc\_instruction.py} file. All other code was either directly written by me, or redone from scratch after our decision to split up.
+    \end{section}
+
+    \begin{section}{Architecture}
+        \begin{subsection}{Pipeline}
+            For this project, I decided to adopt the following order of passes:
+            \begin{enumerate}
+                \item \textbf{First pass}: For this pass, I perform any instruction selection that does not involve the stack.
+                \item \textbf{Register allocation}: In this stage, I perform register allocation, assigning physical registers to the virtual registers or spilling them.
+                \item \textbf{Second pass}: For this pass, I create the prologue and epilogue of the calling convention, finally add on the return logic, and also convert all virtual reigsters to physical registers.
+            \end{enumerate}
+        \end{subsection}
+
+        \begin{subsection}{Stage Details}
+            \begin{enumerate}
+                \item \textbf{First pass}: All arithmetic instructions are translated at this stage using the most simple MIPs or SPIM instruction that I am aware of. Note that in many cases, this creates additional virtual registers. For example, for anything where MIPS expects a register but the input IR provides an immediate, a temporary register is needed. For array assign, there is not only additional virtual registers, but also loops and branches. For return statements, note that in Tiger-IR, only functions with return values will have return instructions. Therefore, these instructions are passed at this stage as well by putting the output value in \(\$v0\). The code responsible for actually returning will be added in the second pass
+                \item \textbf{Register allocation}: At this moment, I have only implemented naive and local register allocation. For naive, I simply spill any virtual registers. For local, I analyze the liveness of each virtual register, and use a greedy algorithm to assign physical registers to them. Note that any function's arguments will not be assigned a physical register, as they are handled separately by the second pass (tldr; if they are stored in \(\$a0 - \$a4\), then they are kept there, otherwise they're spilled).
+                \item \textbf{Second pass}: This is probably the most complicated part of this project, as there are a lot of edge cases involved and certain design elements that deserve a dedicated section. So I will defer discussion to later sections in this report.
+            \end{enumerate}
+        \end{subsection}
+
+        \begin{subsection}{Second Pass and Calling Convention}
+            \begin{itemize}
+                \item \textbf{Stack design}: The stack that I use in this project is inspired by the one linked in the project instruction document, but with some modifications. The stack looks as follows:
+                    \begin{center}
+                        \begin{tabular}{| c | c |}
+                            \hline
+                            old FP & \(\leftarrow\) fp \\
+                            \hline
+                            \$a0 & \\
+                            \hline
+                            \$a1 & \\
+                            \hline
+                            \$a2 & \\
+                            \hline
+                            \$a3 & \\
+                            \hline
+                            arr 0 & \\
+                            \hline
+                            arr 1 & \\
+                            \hline
+                            ... & \\
+                            \hline
+                            var 0 & \\
+                            \hline
+                            var 1 & \\
+                            \hline
+                            ... & \\
+                            \hline
+                            \$t0 & \\
+                            \hline
+                            ... & \\
+                            \hline 
+                            \$t9 & \\
+                            \hline
+                            padding (if needed) & \\
+                            \hline
+                            \$ra (if not main) & \\
+                            \hline
+                            saved registers (if using) & \(\leftarrow\) sp \\
+                            \hline
+                        \end{tabular}
+                    \end{center}
+                    Most of the things stored on this stack is standard, but there are a few things that merits some discussion:
+                    \begin{itemize}
+                        \item \textbf{Argument registers}: Consider a scenario where \(foo()\) is calling another function \(bar()\). When \textit{foo} calls \textit{bar}, it needs to pass arguments through the argument registers, but \textit{foo} itself might still need them after the call to \textit{bar} returns. Therefore, there needs to be a place to store argument register values before and after calls. This is also one of the places where the first pass inserts fake instructions to indicate where the store and restore happens.
+                        \item \textbf{Array}: In this project, I am storing arrays on the heap, but I do not reclaim the memory, so there will be memory leak in a realistic application.
+                        \item \textbf{\$ra}: This is not stored for the \textit{main} function since it doesn't need to return to another function.
+                    \end{itemize}
+                \item \textbf{Spilling}: For the non-optimized version, consider this following instruction:
+                    \[addi \ a, b, 2\]
+                    For spilling, I always use temporary registers starting from \$t0, so for this instruction \$t0 would be used for $a$ and \$t1 would be used for $b$. This instruction would then be converted to the following (pseudocode):
+                    \begin{enumerate}
+                        \item store \$t0 current value
+                        \item store \$t1 current value
+                        \item load $a$ value into \$t0
+                        \item load $b$ value into \$t1
+                        \item \(addi, \$t0, \$t1, 2\)
+                        \item store \$t0 value into a
+                        \item store \$t1 value into b
+                        \item restore \$t0 old value
+                        \item restore \$t1 old value
+                    \end{enumerate}
+                    As one can see, this is grossly inefficent, and not everything is actually needed. In particular, if there is nothing mapped to these temp registers (as is the case when I spill or for higher registers), there is no need to store and restore their values. Similarly, since $b$ is not being written to here, its value needs only be loaded but not stored. There is an optimize flag that can be used to perform these optimization
+                \item \textbf{Local block loading and storing}: For the local allocator, since it's possible (and in fact very common) for one physical register to be assigned to different virtual register in different blocks, and vice versa, I first load all the virtual registers into the physical registers at the start of the block, and then restore them at the end. One issue with this is that if there is a branch instruction whose target is taken, or a jump instruction, then I must do the restore before the jump occurs. This would cause problem if there are other instructions afterwards in the same block, but thankfully that's never the case with branches and jumps.
+            \end{itemize}
+        \end{subsection}
+    \end{section}
+
+    \begin{section}{Performance Analysis}
+        \begin{subsection}{Naive vs Local}
+            To fully demonstrate the advantages brought on by using register allocation, I believe the positive examples are those that have large basic blocks or use arrays. For very small programs, the need for loading a restoring all the local variables before and after each basic block might make it so that the naive allocator actually performs slightly fewer memory operations.
+            \begin{itemize}
+                %\item BFS \begin{center}
+                \item BFS
+                    \begin{table}[H]
+                        \begin{minipage}{.4\textwidth}
+                            \centering
+                            \begin{tabular}{|c|c|c|}
+                                \hline
+                                \multicolumn{3}{|c|}{Memory Reads}\\
+                                \hline
+                                Case \# & Naive & Greedy \\
+                                \hline
+                                0 & 2686 & 1944 \\
+                                \hline
+                                1 & 5862 & 4162 \\
+                                \hline
+                                2 & 7222 & 5107 \\
+                                \hline
+                                3 & 10586 & 7454 \\
+                                \hline
+                                4 & 14095 & 9906 \\
+                                \hline
+                                5 & 15851 & 11129 \\
+                                \hline
+                                6 & 6053 & 4430 \\
+                                \hline
+                                7 & 18101 & 12689 \\
+                                \hline
+                                8 & 7833 & 5710 \\
+                                \hline
+                                9 & 27533 & 19280 \\
+                                \hline
+                            \end{tabular}
+                        \end{minipage}
+                        \hfill
+                        \begin{minipage}{.4\textwidth}
+                            \centering
+                            \begin{tabular}{|c|c|c|}
+                                \hline
+                                \multicolumn{3}{|c|}{Memory Writes}\\
+                                \hline
+                                Case \# & Naive & Greedy \\
+                                \hline
+                                0 & 3125 & 2410 \\
+                                \hline
+                                1 & 5862 & 4982 \\
+                                \hline
+                                2 & 8361 & 6134 \\
+                                \hline
+                                3 & 12215 & 8850 \\
+                                \hline
+                                4 & 16239 & 11683 \\
+                                \hline
+                                5 & 18283 & 13149 \\
+                                \hline
+                                6 & 7760 & 5934 \\
+                                \hline
+                                7 & 20925 & 15081 \\
+                                \hline
+                                8 & 10060 & 7634 \\
+                                \hline
+                                9 & 31697 & 22629 \\
+                                \hline
+                            \end{tabular}
+                        \end{minipage}
+                    \end{table}
+                    As we can see from this example, for both memory reads and writes, the local allocator is more efficient than the naive allocator by reducing the number of memory operations that are performed. With that said, the local allocator is still not the most efficient because there are some optimization that can be done which is not, and a global allocator would likely perform better on most test cases than the local one as well.
+                \item Quicksort
+                    \begin{table}[H]
+                        \begin{minipage}{.4\textwidth}
+                            \centering
+                            \begin{tabular}{|c|c|c|}
+                                \hline
+                                \multicolumn{3}{|c|}{Memory Reads}\\
+                                \hline
+                                Case \# & Naive & Greedy \\
+                                \hline
+                                0 & 1204 & 932 \\
+                                \hline
+                                1 & 2820 & 2116 \\
+                                \hline
+                                2 & 4548 & 3374 \\
+                                \hline
+                                3 & 6343 & 4662 \\
+                                \hline
+                                4 & 7868 & 5792 \\
+                                \hline
+                                5 & 10540 & 7620 \\
+                                \hline
+                                6 & 11732 & 8548 \\
+                                \hline
+                                7 & 14002 & 10138 \\
+                                \hline
+                                8 & 15842 & 11458 \\
+                                \hline
+                                9 & 17706 & 12794 \\
+                                \hline
+                            \end{tabular}
+                        \end{minipage}
+                        \hfill
+                        \begin{minipage}{.4\textwidth}
+                            \centering
+                            \begin{tabular}{|c|c|c|}
+                                \hline
+                                \multicolumn{3}{|c|}{Memory Writes}\\
+                                \hline
+                                Case \# & Naive & Local \\
+                                \hline
+                                0 & 1336 & 1110 \\
+                                \hline
+                                1 & 3116 & 2546 \\
+                                \hline
+                                2 & 5052 & 4134 \\
+                                \hline
+                                3 & 6983 & 5643 \\
+                                \hline
+                                4 & 8682 & 7034 \\
+                                \hline
+                                5 & 11543 & 9206 \\
+                                \hline
+                                6 & 12912 & 10398 \\
+                                \hline
+                                7 & 15437 & 12433 \\
+                                \hline
+                                8 & 17437 & 14013 \\
+                                \hline
+                                9 & 19477 & 15637 \\
+                                \hline
+                            \end{tabular}
+                        \end{minipage}
+                \end{table}
+                Again, we see that local is always more efficient than naive.
+            \end{itemize}
+
+        To reduce the length of this report, I did not show the stats for all the test cases, but this can be easily verified by running the compiler and the SPIM simulator with the run instructions below.
+        \end{subsection}
+    \end{section}
+
+    \begin{section}{Implementation Tools}
+        \begin{subsection}{Language}
+            For this project, I decided to continue using python as I did last time with a teammate. Mostly due to my familiarity with the language, and also the simplicity of the syntax. It also has most of the data structure that I needed for this projec. Specifically, those are: classes/objects, arrays, sets, maps.
+        \end{subsection}
+
+        \begin{subsection}{Data structure}
+            The following is a (potentially incomplete) list of custom data structures that are used in this project:
+            \begin{enumerate}
+                \item a class representing IR instruction, carried over from project 1
+                \item a class representing IR function
+                \item a class representing MC (machine code) instruction
+                \item a class representing MC function
+                \item A wrapped around python's \textit{dict} which takes a prefix such that when inserting a new element, it automatically increments an internal counter and maps the new element to \(prefix_{counter}\). This is used when creating virtual registers to make sure there is no name collision.
+            \end{enumerate}
+
+            The following is a list of builtin or third-party data structures that are used in this project:
+            \begin{enumerate}
+                \item \textbf{List}: This has a lot of application, such as storing registers used in an instruction, storing all the instructions in a function, etc
+                \item \textbf{Dict}: This is python's version of a hashmap. This is used for register maps, also for computing some algorithms. One issues that's raised by the unordered nature of hashmaps is that the output becomes undeterministic, and even causing wrong output sometimes. To remedy this, the next data structure is also used.
+                \item \textbf{OrderedDict}: This is from python's \textit{collections} module. This is similar to \textit{map} in c++.
+                \item \textbf{OrderedSet}: Set is python's version of hash set. It is used for storing things like registers defined and used in an instruction, live points, and any other situation where a set is suitable. Similar to dict, set is also unordered by default in python, and caused some undefined behavior. In most cases where sets are used, the unordered nature is actually fine, but there are some occasions where the program iterates through the elements of the set in a way that order has an impact on the final output. In these cases, a more suitable data structure would be lists (with the restraint that the elements are unique), but since I originally only considered the uniqueness, I found a quicker fix to use the external OrderedSet module which can be installed with pip.
+            \end{enumerate}
+        \end{subsection}
+    \end{section}
+
+
+    \begin{section}{Challenges}
+        \begin{subsection}{First Pass}
+            There were not that many difficult parts about first pass, especially since I did not do the float instruction extra credit. However, with that said, there were a few things that I did not initially expect to have to deal with:
+            \begin{itemize}
+                \item \textbf{Mult and div}: I initially implemented these two with only MIPS instructions, which requires using an extra register and using \textit{mflo}, but I later realized there are SPIM instructions that implement these two operations with a three operand format.
+                \item \textbf{Saving arg register}: As mentioned earlier, since in my calling convention, arguments are passed through the argument registers, they need to be saved and restored before calling another function. This was hard to do at first since in the first pass there is no way to know where these registers should be stored on the stack. I initially thought to do this in second pass instead, but that doesn't exactly work either. In my second pass, the instructions are converted one by one, so given a single write to argument register, there is no way to tell whether this write is a normal part of function logic, or a part of calling another function. The way I tackled this is by inserting temporary instruction \textit{save\_arg} and \textit{restore\_arg} in the first pass.
+            \end{itemize}
+        \end{subsection}
+
+        \begin{subsection}{Register Allocation}
+            I did not run into too many problems at this stage either, but there was one small edge case that I initially did not consider. Since the local allocator performs liveness analysis within a local block, there could be a path to a use that is not within the same block. To tackle this, I consider a variable as live in the case that there is no use or define after a program point, since it could be used in a later block, in addition to the usual intrablock definition.
+        \end{subsection}
+
+        \begin{subsection}{Second Pass}
+            As alluded to earlier, this phase took the most work, and therefore it had the most challenges.
+            \begin{itemize}
+                \item \textbf{Branch instructions}: In general, any restore code should happen after any actual instruction, but instructions like branches and jumps add additional difficulty to this. Namely, for each local block, the register values need to be stored onto the stack respective to the virtual register that they are allocated for. However, with branch instructions, if the branch is taken (or in the case of jumps, always), then this never happens, and the program will not have the correct output. What I elected to do eventually, is that every time a jump or a branch instruction is encountered, the restore code is inserted beforehand. This does not become a problem for the instructions that follow because these instructions are always the last instruction in their basic block (technically for jumps they might not, but in that case the code after is unreachable). I actually only did this for restoring local variables for allocated registers, but not for spilling, becaues in the case of spilling, the restore code only matters for instructions that change the values of any register, but branches do not change values.
+                \item \textbf{Calling convention}: The calling convention is already described in a previous section, so I will not go into detail as to how it works. Instead, I will provide some thoughts on why I've decided to alter things in the calling convention. For the original MIPS calling convention, the arguments are always stored on the stack even if they are passed through registers as well. I personally did not see a need for this so I did not do so. In addition, the MIPS calling convention document makes the distinction between a leaf function and a nonleaf function, but this concept is not relevant to the way that I implement the calling convention. This is because the caller code is handled in the first pass, independent of the stack. I believe it is prudent to do so because the stack will be teared down by the callee before return, so the caller need not worry about it.
+                \item \textbf{Function return}: As mentioned previously, the return logic is handled in the second pass. One edge case that I initially did not think about is that it is possible for a function to return before the end of its static code. In particular, it is possible for there to be a return IR instruction inside of a branch. In this case, I make sure to insert the return logic here, as well as at the end.
+            \end{itemize}
+        \end{subsection}
+    \end{section}
+
+    \begin{section}{Extra Credit Attempted}
+        \begin{subsection}{Spill Optimization}
+            As mentioned earlier, the default way that spilling is performed is very ineffcient, therefore I added functionality for optimizing this behavior. In particular, if the virtual is not being written to, then it doesn't need to be saved. Similarly, if the temporary register is not used in the block, then it doesn't need to be saved either. This functionality can be enabled with the \textit{-{}-optimize} flag. \\
+            In order to show case the performance of this optimization, consider again the quicksort test case. When running the unoptimized version of naive allocator, there are 37017 total reads and 36325 total writes for the 9th input case. On the other hand, for the optimized version, there are 17706 total reads and 19477 total writes. This massively reduces the number of memory operations performed and is much more than a 15\% reduction.
+        \end{subsection}
+
+        \begin{subsection}{Saved Registers}
+            The default version of this backend does not saved registers in anyway, but by adding the \textit{-{}-saved} flag, they will be used in a very similar manner to temp registers.
+        \end{subsection}
+    \end{section}
+
+    \begin{section}{Known bugs and issues}
+        There are no known bugs through my testing with the provided test cases, but here are a few cases that I have not tested rigorously on and therefore believe might cause problems:
+        \begin{enumerate}
+            \item For basic blocks that need have more than 10 local variables, I am not certain if the second pass is currently handling it correctly. I believe there are some test cases provided that include this scenario, but I have not rigorously tested this.
+            \item For functions that take more than four arguments, I have code written for pushing arguments onto the stack, but similar to the item above, this has not been rigorously tested, so it might break.
+            \item Earlier, I alluded to the fact that due to the non-deterministic nature of hash sets and hash maps, I originally had non-deterministic output of assembly code, and in some cases incorrect ones. I have changed the hash maps to \textit{OrderedDict} and also sets to its ordered counterpart. With that said, there might still be some undefined behavior that I was not able to uncover in my testing. Therefore, \textbf{should any hidden test cases fail on my implementaion, it might work with more than one run}.
+        \end{enumerate}
+    \end{section}
+
+    \begin{section}{Run instructions}
+        As alluded to earlier, I use an third-party data structure called \textit{OrderedSet} (unfortunately, python's \textit{collections} module only has \textit{OrderedDict} and not set). This module can be installed with:
+        \begin{verbatim}
+            pip install orderedset
+        \end{verbatim}
+        To run the program, use this command:
+        \begin{verbatim}
+            python runner.py --input="<input file path>"
+            --allocator="<naive/local>"
+        \end{verbatim}
+
+        The program will output \textit{out.s} in the same directory as \textit{runner.py}.
+
+        \begin{subsection}{Optional flags}
+            Here are the optional flags that are available:
+            \begin{itemize}
+                \item \textit{-{}-output}: If this is passed, the assembly file will be output to the specified location rather than the default \textit{out.s}.
+                \item \textit{-{}-optimize}: This flag optmizes the spill code. This mostly only applies for naive allocator, but will also work for the local allocator if there is some block where some virtual register is being spilled.
+                \item \textit{-{}-saved}: This flag makes the local allocator use the S registers for spilling in tandem with the t registers.
+            \end{itemize}
+        \end{subsection}
+    \end{section}
+\end{document}

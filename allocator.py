@@ -1,5 +1,6 @@
 from typing import List, Tuple
 from collections import OrderedDict
+from orderedset import OrderedSet
 import functools
 from mc_instruction import MCInstruction
 from mc_function import MCFunction
@@ -92,7 +93,7 @@ def get_regs_from_instructions(instrs: List[MCInstruction], args):
             instr_regs = [reg for reg in instr.regs if should_map(reg, args)]
             regs += instr_regs
 
-    return set(regs)
+    return list(OrderedSet(regs))
 
 def get_live_ranges(instrs: List[MCInstruction], args):
     # NOTE: here the index is right before the instruction (program point)
@@ -108,21 +109,23 @@ def get_live_ranges(instrs: List[MCInstruction], args):
             for reg in instr.get_uses():
                 if should_map(reg, args):
                     if reg not in uses:
-                        uses[reg] = set()
+                        uses[reg] = OrderedSet()
                     uses[reg].add(i)
             for reg in instr.get_defs():
                 if should_map(reg, args):
                     if reg not in defs:
-                        defs[reg] = set()
+                        defs[reg] = OrderedSet()
                     defs[reg].add(i)
 
-    use_keys = set(uses.keys())
-    def_keys = set(defs.keys())
-    assert(use_keys.union(def_keys) == regs)
+    use_keys = OrderedSet(uses.keys())
+    def_keys = OrderedSet(defs.keys())
+    # print("use defs: ", use_keys.union(def_keys))
+    # print("regs:", OrderedSet(regs))
+    # assert(use_keys.union(def_keys) == OrderedSet(regs))
     # print(use_keys.union(def_keys))
     # assert()
 
-    live_points = {reg: set() for reg in regs}
+    live_points = {reg: OrderedSet() for reg in regs}
 
     for reg in regs:
         for i in range(len(instrs)+1):
@@ -158,7 +161,11 @@ class NaiveAllocator:
     def get_reg_maps(self):
         reg_maps = {}
 
-        for bbid, instrs in self.cfg.bbs.items():
+        sorted_keys = list(self.cfg.bbs.keys())
+        sorted_keys.sort()
+        # for bbid, instrs in self.cfg.bbs.items():
+        for bbid in sorted_keys:
+            instrs = self.cfg.bbs[bbid]
             regs = get_regs_from_instructions(instrs, self.function.args)
             reg_map = {reg: "spill" for reg in regs}
             reg_maps[bbid] = reg_map
@@ -179,7 +186,12 @@ class LocalAllocator:
     def get_reg_maps(self):
         reg_maps = {}
 
-        for bbid, instrs in self.cfg.bbs.items():
+        sorted_keys = list(self.cfg.bbs.keys())
+        sorted_keys.sort()
+        # for bbid, instrs in self.cfg.bbs.items():
+        for bbid in sorted_keys:
+        # for bbid, instrs in self.cfg.bbs.items():
+            instrs = self.cfg.bbs[bbid]
             reg_map = LocalAllocator.alloc_for_bb(instrs, use_saved=self.use_saved, args=self.function.args)
             reg_maps[bbid] = reg_map
 
@@ -193,7 +205,7 @@ class LocalAllocator:
     def alloc_for_bb(instrs: List[MCInstruction], use_saved=False, args=None):
         regs = get_regs_from_instructions(instrs, args)
         live_ranges = get_live_ranges(instrs, args)
-        adj_list = {reg: set() for reg in regs}
+        adj_list = {reg: OrderedSet() for reg in regs}
         for i, reg1 in enumerate(regs):
             for j, reg2 in enumerate(regs):
                 if i != j:
@@ -203,14 +215,14 @@ class LocalAllocator:
                         adj_list[reg1].add(reg2)
                         adj_list[reg2].add(reg1)
 
-        phys_regs = ["$t%d" % i for i in range(10)]
+        phys_regs = ["$t%d" % i for i in range(7)]
         if use_saved:
             phys_regs += ["$s%d" % i for i in range(8)]
 
         ordered_regs = sorted_regs(regs, instrs)
 
-        temp_map = {phys: set() for phys in phys_regs}
-        temp_map["spill"] = set()
+        temp_map = {phys: OrderedSet() for phys in phys_regs}
+        temp_map["spill"] = OrderedSet()
 
 
         while len(ordered_regs) != 0:

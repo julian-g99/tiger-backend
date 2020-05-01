@@ -1,0 +1,20 @@
+\BOOKMARK [1][-]{section.1}{Logistics Clarification}{}% 1
+\BOOKMARK [1][-]{section.2}{Architecture}{}% 2
+\BOOKMARK [2][-]{subsection.2.1}{Pipeline}{section.2}% 3
+\BOOKMARK [2][-]{subsection.2.2}{Stage Details}{section.2}% 4
+\BOOKMARK [2][-]{subsection.2.3}{Second Pass and Calling Convention}{section.2}% 5
+\BOOKMARK [1][-]{section.3}{Performance Analysis}{}% 6
+\BOOKMARK [2][-]{subsection.3.1}{Naive vs Local}{section.3}% 7
+\BOOKMARK [1][-]{section.4}{Implementation Tools}{}% 8
+\BOOKMARK [2][-]{subsection.4.1}{Language}{section.4}% 9
+\BOOKMARK [2][-]{subsection.4.2}{Data structure}{section.4}% 10
+\BOOKMARK [1][-]{section.5}{Challenges}{}% 11
+\BOOKMARK [2][-]{subsection.5.1}{First Pass}{section.5}% 12
+\BOOKMARK [2][-]{subsection.5.2}{Register Allocation}{section.5}% 13
+\BOOKMARK [2][-]{subsection.5.3}{Second Pass}{section.5}% 14
+\BOOKMARK [1][-]{section.6}{Extra Credit Attempted}{}% 15
+\BOOKMARK [2][-]{subsection.6.1}{Spill Optimization}{section.6}% 16
+\BOOKMARK [2][-]{subsection.6.2}{Saved Registers}{section.6}% 17
+\BOOKMARK [1][-]{section.7}{Known bugs and issues}{}% 18
+\BOOKMARK [1][-]{section.8}{Run instructions}{}% 19
+\BOOKMARK [2][-]{subsection.8.1}{Optional flags}{section.8}% 20

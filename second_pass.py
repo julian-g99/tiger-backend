@@ -196,7 +196,7 @@ def calling_convention(function: MCFunction) -> (List[MCInstruction], List[MCIns
         # raise ValueError("unexpected instruction for instr_uses()")
 
 
-def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int], optimize=True) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
+def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int], optimize=False) -> (List[MCInstruction], List[MCInstruction], Dict[str, str]):
     """
     Performs spilling given a register map and the set of original virtual registers, with some additional information. At the end, outputs the spilling code as well as the complete register mapping (with every virtual register mapped to a physical register). Uses t0-t2 for spilling (since a single instruction should not have more than three registers).
 
@@ -212,13 +212,28 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
         new_args: the physical registers of the instruction
     """
     # NOTE: it's assumed that the position at $fp will be used for saving the register used here
-    prologue = []
-    epilogue = []
+    save_temp = []
+    load_virt = []
+    save_virt = []
+    load_temp = []
     new_args = []
 
-    curr_temp = 0
+    curr_temp = 9
     # for phys, ir in zip(phys_reg, ir_regs):
     new_map = {}
+
+    # compute used temp regs in the instruction
+    used_temps = set() 
+    for virt in instr.regs:
+        if virt[0] == "$":
+            used_temps.add(virt)
+        else:
+            phys = reg_map[virt]
+            if phys != "spill":
+                used_temps.add(phys)
+
+
+    is_spilled = False
     for virtual in instr.regs:
         if virtual not in new_map:
             if virtual[0] == "$":
@@ -227,7 +242,15 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
             else:
                 physical = reg_map[virtual]
                 if physical == "spill":
+                    is_spilled = True
                     temp_reg = "$t%d" % curr_temp
+
+                    while temp_reg in used_temps:
+                        curr_temp -= 1
+                        assert(curr_temp < 10)
+                        temp_reg = "$t%d" % curr_temp
+                    # used_temps.add(temp_reg)
+
                     if optimize:
                         temp_needs_save = temp_reg in reg_map.values()
                         virt_needs_load = virtual in instr.get_uses()
@@ -236,24 +259,48 @@ def spill(reg_map: Dict[str, str], instr: MCInstruction, offsets: Dict[str, int]
                         virt_needs_load = True
 
                     if temp_needs_save:
-                        prologue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+                        save_temp.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
 
                     if virt_needs_load:
-                        prologue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+                        load_virt.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
 
-                    epilogue.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
+                    save_virt.append(MCInstruction("sw", regs=[temp_reg, "$fp"], offset=offsets[virtual]))
 
                     if temp_needs_save:
-                        epilogue.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
+                        load_temp.append(MCInstruction("lw", regs=[temp_reg, "$fp"], offset=offsets[temp_reg]))
 
                     new_args.append(temp_reg)
                     new_map[virtual] = temp_reg
-                    curr_temp += 1
+                    curr_temp -= 1
                 else:
                     new_args.append(physical)
                     new_map[virtual] = physical
         else:
             new_args.append(new_map[virtual])
+
+    prologue = save_temp + load_virt
+    epilogue = save_virt + load_temp
+
+    # if is_spilled:
+        # print("used temps: ", used_temps)
+        # print(reg_map)
+        # print(offsets)
+        # print("prologue:")
+        # for i in prologue:
+            # print(i)
+        
+        # print("instr: ")
+
+        # new_instr = instr
+        # new_instr.regs = new_args
+        # print(new_instr)
+
+        # print("epilogue:")
+        # for i in epilogue:
+            # print(i)
+        # print()
+        # print()
+        # print()
 
     return prologue, epilogue, new_args
 
@@ -277,7 +324,7 @@ def save_and_restore(reg_name: str) -> Tuple[List[MCInstruction], List[MCInstruc
 
     return save_code, restore_code
 
-def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int], epilogue, rtn) -> List[MCInstruction]:
+def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int], epilogue, rtn, optimize=False) -> List[MCInstruction]:
     """
     Convert a single instruction from using virtual register to physical register. Also, if this instruction is `call` or `callr`, then it's also changed to an actual machine instruction.
     Args:
@@ -307,7 +354,7 @@ def convert_instr(reg_map, instr: MCInstruction, offsets: Dict[str, int], epilog
         return [instr]
     prologue = []
     epilogue = []
-    save, restore, new_regs = spill(reg_map, instr, offsets) # it's fine to call this on non-spilling since the code arrays will be empty
+    save, restore, new_regs = spill(reg_map, instr, offsets, optimize=optimize) # it's fine to call this on non-spilling since the code arrays will be empty
 
     output += prologue
     output += save
@@ -337,7 +384,7 @@ def load_and_save_locals(reg_map: Dict[str, int], offsets: Dict[str, int]) -> Tu
 
     return load, save
 
-def translate_body(function: MCFunction, offsets: Dict[str, int], epilogue, rtn) -> Tuple[bool, List[MCInstruction]]:
+def translate_body(function: MCFunction, offsets: Dict[str, int], epilogue, rtn, optimize=False) -> Tuple[bool, List[MCInstruction]]:
     """
     Translates the body of a function one by one. Should call methods like convert_instr.
 
@@ -373,7 +420,7 @@ def translate_body(function: MCFunction, offsets: Dict[str, int], epilogue, rtn)
             
             if instr.is_jump() or instr.is_branch():
                 output += save
-            output += convert_instr(reg_map, instr, offsets, epilogue, rtn)
+            output += convert_instr(reg_map, instr, offsets, epilogue, rtn, optimize=optimize)
         output += save
 
         # if jump is not None:
@@ -391,7 +438,7 @@ def return_function(function: MCFunction) -> [List[MCInstruction]]:
         output.append(MCInstruction("jr", regs=["$ra"]))
     return output
 
-def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCInstruction], List[MCInstruction], List[MCInstruction]]:
+def parse_function(function: MCFunction, optimize=False) -> Tuple[List[MCInstruction], List[MCInstruction], List[MCInstruction], List[MCInstruction]]:
     """
     Parses an MCFunction to a list of machine instructions. This should be the final product that can be outputted to a file.
     Args:
@@ -421,11 +468,11 @@ def parse_function(function: MCFunction) -> Tuple[List[MCInstruction], List[MCIn
         offsets[arg] = curr_offset 
         curr_offset += 4
 
-    sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
+    # sorted_offsets = [(k, v) for k, v in sorted(offsets.items(), key=lambda item: item[1])]
     #NOTE: if the return value above is None that means it's a simple leaf
     rtn = return_function(function)
 
-    has_returned, translated_body = translate_body(function, offsets, epilogue, rtn)
+    has_returned, translated_body = translate_body(function, offsets, epilogue, rtn, optimize=optimize)
 
     # rtn += epilogue
 

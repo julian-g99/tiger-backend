@@ -9,14 +9,16 @@ import re
 
 from cfg import CFG
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--allocator', type=str, default='greedy', help='the type of register allocation to perform (\'naive\' or \'greedy\')')
-parser.add_argument('--input', type=str, help='input file')
-parser.add_argument('--output', type=str, default='out.s', help='output file')
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument('--allocator', type=str, default='naive', help='the type of register allocation to perform (\'naive\' or \'local\')')
+arg_parser.add_argument('--input', type=str, help='input file')
+arg_parser.add_argument('--output', type=str, default='out.s', help='output file')
+arg_parser.add_argument('--optimize', action='store_true', default=False)
+arg_parser.add_argument('--saved', action='store_true', default=False)
 
 
 def main():
-    args = parser.parse_args()
+    args = arg_parser.parse_args()
     fname = args.input
     allocator = None
     instructions = parse_instructions(fname)
@@ -44,7 +46,7 @@ def main():
             allocator.map_function()
     elif args.allocator == "local":
         for func in mc_functions:
-            allocator = LocalAllocator(func)
+            allocator = LocalAllocator(func, use_saved=args.saved)
             allocator.map_function()
 
             # print(func.name)
@@ -52,29 +54,43 @@ def main():
             # pp.pprint(func.reg_maps)
 
     # Continue selecting from here
-    should_print = True
+    should_print = False
+    outfile = args.output
+    outfile = open(outfile, "w")
     if should_print:
         print(".text")
+    outfile.write(".text\n")
     for function in mc_functions:
-        prologue, translated_body, epilogue, rtn = parse_function(function)
+        prologue, translated_body, epilogue, rtn = parse_function(function, optimize=args.optimize)
         # prologue, translated_body = parse_function(function)
+        outfile.write(function.name + ":\n")
         if should_print:
             print(function.name + ":")
-            for i in prologue:
-                print("\t%s" % i)
-            print()
 
-            for i in translated_body:
+        for i in prologue:
+            outfile.write("\t%s\n" % i)
+            if should_print:
                 print("\t%s" % i)
-            print()
+        outfile.write("\n")
 
-            for i in epilogue:
+        for i in translated_body:
+            outfile.write("\t%s\n" % i)
+            if should_print:
                 print("\t%s" % i)
-            print()
+        outfile.write("\n")
 
-            for i in rtn:
+        for i in epilogue:
+            outfile.write("\t%s\n" % i)
+            if should_print:
+                print("\t%s" % i)
+        outfile.write("\n")
+
+        for i in rtn:
+            outfile.write("\t%s\n" % i)
+            if should_print:
                 print("\t%s" % i)
 
+    outfile.close()
 
 if __name__ == "__main__":
     main()
